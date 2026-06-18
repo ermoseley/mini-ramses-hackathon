@@ -328,7 +328,7 @@ MODOBJ += init_neq_chem.o clfind_commons.o turb_commons.o mdl_commons.o mdl.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
 	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o marshal.o
 ifeq ($(COMPILER),NVHPC)
-MODOBJ += cub_module_radix_sort_c.o cub_module_radix_sort_f.o cub_inclusive_scan_c.o cub_inclusive_scan_f.o gpu_utils.o gpu_hydro.o gpu_cooling.o gpu_star.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o gpu_runner.o gpu_part.o gpu_manager.o
+MODOBJ += cub_module_radix_sort_c.o cub_module_radix_sort_f.o cub_inclusive_scan_c.o cub_inclusive_scan_f.o gpu_utils.o gpu_hydro.o gpu_cooling.o gpu_star.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o gpu_turb.o gpu_runner.o gpu_part.o gpu_manager.o
 endif
 MODOBJ += rho_fine.o
 MODOBJ +=  upload.o init_xion.o \
@@ -372,7 +372,7 @@ cub_module_radix_sort_f.o: cub_module_radix_sort.cuf cub_module_radix_sort_c.o
 #############################################################################
 # Explicit rules for GPU CUDA Fortran sources (bypasses VPATH)
 ifeq ($(COMPILER),NVHPC)
-GPU_CUF_OBJS = gpu_utils.o gpu_hydro.o gpu_cooling.o gpu_star.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o gpu_runner.o gpu_part.o
+GPU_CUF_OBJS = gpu_utils.o gpu_hydro.o gpu_cooling.o gpu_star.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o gpu_turb.o gpu_runner.o gpu_part.o
 $(GPU_CUF_OBJS): %.o: $(GPU_PATH)/%.cuf
 	$(F90) $(FFLAGS) -c $< -o $@
 gpu_manager.o: $(GPU_PATH)/gpu_manager.f90
@@ -387,10 +387,11 @@ gpu_star.o: gpu_utils.o
 gpu_rho.o: gpu_utils.o
 gpu_refine.o: gpu_utils.o
 gpu_flag.o: gpu_utils.o
+gpu_turb.o: gpu_utils.o turb_commons.o
 gpu_runner.o: gpu_utils.o cub_inclusive_scan_f.o cub_module_radix_sort_f.o
-# gpu_runner.cuf uses hydro/cooling/star/rho/mg/refine/flag *_device modules from separate
+# gpu_runner.cuf uses hydro/cooling/star/rho/mg/refine/flag/turb *_device modules from separate
 # gpu_*.cuf units; MODOBJ listing order is not a build-order guarantee for -j1.
-gpu_runner.o: gpu_hydro.o gpu_cooling.o gpu_star.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o
+gpu_runner.o: gpu_hydro.o gpu_cooling.o gpu_star.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o gpu_turb.o
 # cooling_fine.f90 uses gpu_runner (via #ifdef _CUDA) so must build after it
 cooling_fine.o: gpu_runner.o
 # gpu_part.cuf is its own CUDA Fortran module (part_device); it uses

@@ -686,7 +686,7 @@ hackathon_stage_fftw_header() {
       /usr/local/fftw/gcc/3.3.9/include/fftw3.f; do
     [[ -n "${src}" && -f "${src}" ]] || continue
     cp -f "${src}" "${dest}/fftw3.f"
-    echo "== staged fftw3.f: ${src} -> ${dest}/fftw3.f"
+    echo "== staged fftw3.f: ${src} -> ${dest}/fftw3.f" >&2
     printf '%s' "${dest}"
     return 0
   done
