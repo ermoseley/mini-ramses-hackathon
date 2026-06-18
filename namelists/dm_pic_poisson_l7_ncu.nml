@@ -1,0 +1,57 @@
+! DM-only GPU PM case for Nsight Compute profiling (levelmin=levelmax=7).
+! Same physics as dm_pic_poisson_l7.nml but capped at 2 steps — NCU is slow.
+! initfile(1) is overridden by the SLURM wrapper (IC_DIR env var).
+
+&RUN_PARAMS
+ cosmo=.true.
+ pic=.true.
+ poisson=.true.
+ hydro=.false.
+ nrestart=0
+ ncontrol=1
+ nstepmax=2
+ nsubcycle=1,1
+ nremap=10
+ verbose=.true.
+ debug=.false.
+ nsuperoct=2
+/
+
+&AMR_PARAMS
+ levelmin=7
+ levelmax=7
+ ngridmax=1600000
+ ncachemax=1600000
+ nexpand=1
+ boxlen=1.0
+ npartmax=8000000
+/
+
+&INIT_PARAMS
+ filetype='grafic'
+ initfile(1)='__ABSOLUTE_IC_DIR_SET_BY_SLURM__'
+/
+
+&OUTPUT_PARAMS
+ nfile=1
+ delta_tout=0.05
+ tend=0.04
+ foutput=2
+/
+
+&POISSON_PARAMS
+ epsilon=1.d-4
+ part_mass_deposition_scheme=1
+ part_dep_algo=2
+ part_force_interpolation_scheme=1
+/
+
+&UNITS_PARAMS
+ units_density=1.0d0
+ units_length=1.0d0
+ units_time=1.0d0
+/
+
+&BOUNDARY_PARAMS
+ periodic=.true.,.true.,.true.
+/

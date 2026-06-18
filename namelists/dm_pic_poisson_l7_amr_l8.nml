@@ -1,0 +1,65 @@
+! DMO GPU/CPU long-run AMR case (levelmin=7, levelmax=8, cosmological units).
+! Same physics base as dm_pic_poisson_l7.nml with mass-based refinement to L8.
+! initfile(1) is overridden by the SLURM wrapper (IC_DIR env var).
+! Runtime length defaults (dmo_gpu.slurm / dmo_cpu.slurm / submit_profiles.sh):
+!   nstepmax=250, foutput=25, tend=3.0
+! Override via DMO_NSTEPMAX, DMO_FOUTPUT, DMO_TEND when submitting.
+
+&RUN_PARAMS
+ cosmo=.true.
+ pic=.true.
+ poisson=.true.
+ hydro=.false.
+ nrestart=0
+ ncontrol=1
+ nstepmax=5
+ nsubcycle=1,1
+ nremap=10
+ verbose=.true.
+ debug=.false.
+ nsuperoct=2
+/
+
+&AMR_PARAMS
+ levelmin=7
+ levelmax=8
+ ngridmax=4000000
+ ncachemax=4000000
+ nexpand=0
+ boxlen=1.0
+ npartmax=8000000
+/
+
+&INIT_PARAMS
+ filetype='grafic'
+ initfile(1)='__ABSOLUTE_IC_DIR_SET_BY_SLURM__'
+/
+
+&OUTPUT_PARAMS
+ nfile=1
+ delta_tout=0.05
+ tend=0.1
+ foutput=5
+/
+
+&POISSON_PARAMS
+ epsilon=1.d-4
+ part_mass_deposition_scheme=1
+ part_dep_algo=2
+ part_force_interpolation_scheme=1
+/
+
+&REFINE_PARAMS
+ m_refine=8.0, -1.0
+ mass_cut_refine=-1.0
+/
+
+&UNITS_PARAMS
+ units_density=1.0d0
+ units_length=1.0d0
+ units_time=1.0d0
+/
+
+&BOUNDARY_PARAMS
+ periodic=.true.,.true.,.true.
+/

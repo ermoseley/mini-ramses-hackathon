@@ -1,0 +1,88 @@
+# Initial conditions — never commit (generated at runtime by harness / grafic scripts)
+ics/
+ics_*/
+ic_*/
+ic_grafic/
+**/ics/
+**/ics_*/
+**/ic_*/
+**/ic_grafic/
+**/ic_bxleft
+**/ic_bxright
+**/ic_byleft
+**/ic_byright
+**/ic_bzleft
+**/ic_bzright
+**/ic_d
+**/ic_u
+**/ic_v
+**/ic_w
+**/ic_p
+**/ic_pvar_*
+**/level_*/
+grafic.tar
+
+# Simulation output data — never commit (RAMSES snapshots, dumps, job workdirs)
+output_*/
+**/output_*/
+plot_*/
+movie_*/
+part_*/
+sink_*/
+patch_*/
+info_*/
+timer_*/
+dmo_gpu_*/
+dmo_cpu_*/
+dmo_work_*/
+dmo_amr_long_*/
+profiles_*/
+debug_cosmo_*/
+gpu_dmo_*/
+gpu_dmo_amr_long_*/
+gpu_dmo_test_*/
+srun_*/
+# Staged namelists written to RUN_DIR (templates live in namelists/)
+/run_dmo_auto_*.nml
+
+# Run logs and job artifacts
+*.out
+*.err
+build.log
+run.log
+build_*.log
+compile_log*.txt
+compile_log_*.txt
+
+# Profiling traces and exports
+*.nsys-rep
+*.ncu-rep
+profile_exports/
+hydro_integrator/
+kick/
+cic/
+
+# Plots and metrics dumps (derived from output data)
+*.png
+*.csv
+*.pdf
+details.txt
+metrics_raw.csv
+ncu*.txt
+ncu*.csv
+
+# Editor / OS
+.DS_Store
+*~
+\#*\#
+__pycache__/
+*.pyc
+.claude/
+.cursor/
+
+# Staging / local sync scratch
+_cluster_src/
+_stellar_sync/
+
+# Optional large vendor trees (if present locally)
+vendor/

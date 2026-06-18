@@ -1,0 +1,61 @@
+! Orszag-Tang vortex with one passive scalar (checkerboard in ic_pvar_00001).
+! Same MHD AMR setup as orszag_tang_amr.nml (ot-amr): 2D (x,y) vortex uniform
+! along z, periodic boundaries, t=0.5 with outputs at t=0.25 and t=0.5.
+! Base grid 32^3 (levelmin=5); refinement to levelmax=8 via err_grad_p=0.15.
+! ICs from hackathon/orszag_tang_pscal.py (OT hydro+B + checkerboard pscal).
+!
+! GPU build (submit_profiles.sh ot-pscal):
+!   make COMPILER=NVHPC NHILBERT=1 HYDRO=1 MHD=1 NPSCAL=1 NPRE=8 NDIM=3 ramses
+!        (NVAR=6; passive scalar in uold(6); B in bold/bnew; no GRAV, no COSMO)
+
+&RUN_PARAMS
+ cosmo=.false.
+ hydro=.true.
+ poisson=.false.
+ pic=.false.
+ nrestart=0
+ nstepmax=100000
+ nsubcycle=10*1,
+ ncontrol=1
+ nsuperoct=2
+ verbose=.false.
+ debug=.false.
+/
+
+&OUTPUT_PARAMS
+ delta_tout=0.25
+ tend=0.5
+/
+
+&INIT_PARAMS
+ filetype='grafic'
+ initfile(1)='ic_grafic'
+/
+
+&AMR_PARAMS
+ levelmin=5
+ levelmax=8
+ ngridmax=30000000
+ ncachemax=12000000
+ nexpand=1,
+ boxlen=1.0
+/
+
+&HYDRO_PARAMS
+ gamma=1.6666667
+ courant_factor=0.8
+ slope_type=2
+ slope_mag_type=2
+ riemann='hlld'
+ riemann2d='hlld'
+/
+
+&REFINE_PARAMS
+ err_grad_p=0.15
+ interpol_var=0
+ interpol_type=2
+/
+
+&BOUNDARY_PARAMS
+ periodic=.true.,.true.,.true.
+/

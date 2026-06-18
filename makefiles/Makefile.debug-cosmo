@@ -1,0 +1,463 @@
+#############################################################################
+# debug-cosmo GPU build (harness only — do not replace bin/Makefile).
+#
+# rteyssie develop-style cosmo flags with cluster-safe NVHPC link wiring
+# (-D_CUDA, -mp, NVHPC cuda/math -L paths). Default NPRE=8 like bin/Makefile.
+#
+# Build from ${MINIRAM}/bin (serial make only):
+#   module load nvhpc/25.5
+#   make -f ~/hackathon/Makefile.debug-cosmo \
+#     NDIM=3 COMPILER=NVHPC HYDRO=1 GRAV=1 UNITS=COSMO CUDA_ARCH=sm_80 ramses
+#
+# Or: ./submit_profiles.sh debug-cosmo
+#############################################################################
+# If you have problems with this makefile, contact Romain.Teyssier@gmail.com
+#############################################################################
+# Compilation time parameters
+COMPILER = NVHPC
+CUDA_ARCH ?= sm_80
+CUDA_PROFILE = 0
+FASTMATH = 0
+PAPER = 0
+NDIM = 3
+MPI = 0
+HYDRO = 1
+GRAV = 0
+MHD = 0
+RT = 0
+RTZ = 0
+INIT =
+UNITS =
+NENER = 0
+NMETAL = 0
+TURB = 0
+TRCFLX = 0
+N_HYDROGEN_IONS = 0
+N_H2 = 0
+N_HELIUM_IONS = 0
+N_CARBON_IONS = 0
+N_NITROGEN_IONS = 0
+N_OXYGEN_IONS = 0
+N_NEON_IONS = 0
+N_MAGNESIUM_IONS = 0
+N_SILICON_IONS = 0
+N_SULFUR_IONS = 0
+N_IRON_IONS = 0
+NION = 0
+NPSCAL = 0
+NRTGRP = 0
+NHILBERT = 1
+NVECTOR = 32
+NPRE = 8
+PATCH =
+DEBUG = 0
+HDF5 = 0
+MPIF90 = mpif90
+EXEC = ramses
+# CUB accelerators for NVHPC GPU builds (match mini-ramses-dev/bin/Makefile defaults).
+CUB_SORT_PART = 1
+CUB_SORT_REFINE = 1
+CUB_SCAN_REFINE = 1
+#############################################################################
+# Compute NVAR
+# MHD stores B in separate face arrays (bold/bnew), not in uold. Keep the
+# conserved hydro baseline at rho, momenta, E; NPSCAL adds real passive scalars.
+NHYDRO = 5
+ifeq ($(RTZ),1)
+NION := $(N_CARBON_IONS)+$(N_NITROGEN_IONS)+$(N_OXYGEN_IONS)
+NION := $(NION)+$(N_NEON_IONS)+$(N_MAGNESIUM_IONS)+$(N_SILICON_IONS)
+NION := $(NION)+$(N_SULFUR_IONS)+$(N_IRON_IONS)
+NION := $(NION)+$(N_HYDROGEN_IONS)+$(N_H2)+$(N_HELIUM_IONS)
+endif
+# Same NVAR token as bin/Makefile (-DNVAR=5+0+0+0+0 style) for CPU/GPU cpp parity.
+NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETAL)+$(NION)
+#############################################################################
+GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
+GITHASH = $(shell git log --pretty=format:'%H' -n 1)
+GITREPO = $(shell git config --get remote.origin.url)
+BUILDDATE = $(shell date +"%D-%T")
+BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
+DEFINES = -DNDIM=$(NDIM) -DNVAR=$(NVAR)
+ifeq ($(RTZ),1)
+DEFINES += -DN_HYDROGEN_IONS=$(N_HYDROGEN_IONS)
+DEFINES += -DN_HELIUM_IONS=$(N_HELIUM_IONS)
+DEFINES += -DN_CARBON_IONS=$(N_CARBON_IONS)
+DEFINES += -DN_NITROGEN_IONS=$(N_NITROGEN_IONS)
+DEFINES += -DN_OXYGEN_IONS=$(N_OXYGEN_IONS)
+DEFINES += -DN_NEON_IONS=$(N_NEON_IONS)
+DEFINES += -DN_MAGNESIUM_IONS=$(N_MAGNESIUM_IONS)
+DEFINES += -DN_SILICON_IONS=$(N_SILICON_IONS)
+DEFINES += -DN_SULFUR_IONS=$(N_SULFUR_IONS)
+DEFINES += -DN_IRON_IONS=$(N_IRON_IONS)
+DEFINES += -DN_H2=$(N_H2)
+endif
+ifneq ($(NION),0)
+   DEFINES += -DNION=$(NION)
+endif
+ifeq ($(HYDRO),1)
+   DEFINES += -DHYDRO
+endif
+ifeq ($(MHD),1)
+   DEFINES += -DMHD
+endif
+ifeq ($(GRAV),1)
+   DEFINES += -DGRAV
+endif
+ifeq ($(TURB),1)
+   DEFINES += -DTURB
+endif
+ifeq ($(TRCFLX),1)
+   DEFINES += -DTRCFLX
+endif
+ifneq ($(NENER),0)
+   DEFINES += -DNENER=$(NENER)
+endif
+ifeq ($(RT),1)
+   DEFINES += -DRT -DNRTGRP=$(NRTGRP)
+endif
+ifeq ($(RTZ),1)
+   DEFINES += -DRTZ
+endif
+ifneq ($(NVECTOR),32)
+   DEFINES += -DNVECTOR=$(NVECTOR)
+endif
+ifneq ($(NPRE),8)
+   DEFINES += -DNPRE=$(NPRE)
+endif
+ifneq ($(NHILBERT),1)
+   DEFINES += -DNHILBERT=$(NHILBERT)
+endif
+# Warp-cooperative fine-force gather in the GPU particle kick (default OFF).
+# NB: hackathon_common.sh passes KICK_COOP_GATHER on the make command line;
+# without this block the define was silently dropped for -f Makefile.a100 builds.
+KICK_COOP_GATHER = 0
+# Validation-only A/B for the coop gather: also run the scalar gather in-kernel
+# and compare exactly. Requires KICK_COOP_GATHER=1; not for performance runs.
+KICK_COOP_VALIDATE = 0
+ifeq ($(KICK_COOP_GATHER),1)
+   DEFINES += -DKICK_COOP_GATHER
+endif
+ifeq ($(KICK_COOP_VALIDATE),1)
+   DEFINES += -DKICK_COOP_VALIDATE
+endif
+ifeq ($(PAPER),1)
+   DEFINES += -DPAPER
+endif
+#############################################################################
+# Set proper units and initial conditions
+ifneq ($(INIT),)
+   DEFINES += -DINIT=$(INIT)
+endif
+ifneq ($(UNITS),)
+   DEFINES += -DUNITS=$(UNITS)
+endif
+#############################################################################
+# GNU compiler (gfortran)
+ifeq ($(COMPILER),GNU)
+   FFLAGS = -cpp $(DEFINES)
+   ifeq ($(MPI),1)
+      F90 = $(MPIF90)
+      FC = gfortran
+   else
+      F90 = gfortran
+      FC = gfortran
+      FFLAGS += -DWITHOUTMPI
+   endif
+   F90 += -ffree-line-length-none -fimplicit-none
+   FC += -ffree-line-length-none -fimplicit-none
+   ifeq ($(DEBUG),1)
+      F90 += -O0 -fcheck=bounds
+      FFLAGS += -g -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
+      F90 += -Wuninitialized -Wall
+   else
+      F90 += -O3
+   endif
+endif
+#############################################################################
+# Intel compiler
+ifeq ($(COMPILER),INTEL)
+   FFLAGS = -cpp $(DEFINES)
+   ifeq ($(MPI),1)
+      F90 = $(MPIF90)
+      FC = ifort
+   else
+      F90 = ifort
+      FC = ifort
+      FFLAGS += -DWITHOUTMPI
+   endif
+   F90 += -fp-model source
+   FC += -fp-model source
+   ifeq ($(DEBUG),1)
+      F90 += -warn all -O0 -g -traceback -check bounds
+      FFLAGS += -fpe0 -ftrapuv -init=zero -init=snan -init=arrays
+   else
+      F90 += -O3
+   endif
+endif
+#############################################################################
+# NVHPC compiler, A100-focused target (CUDA_ARCH default sm_80). Identical to
+# Makefile.gpu in every other respect except the default arch list.
+# Do not pass nordc: gpu_refine.cuf uses cooperative_groups / grid_global,
+# which require relocatable device code (rdc is the NVHPC default).
+ifeq ($(COMPILER),NVHPC)
+   ifneq ($(CUB_SORT_PART),0)
+      DEFINES += -DCUB_SORT_PART
+   endif
+   ifneq ($(CUB_SORT_REFINE),0)
+      DEFINES += -DCUB_SORT_REFINE
+   endif
+   ifneq ($(CUB_SCAN_REFINE),0)
+      DEFINES += -DCUB_SCAN_REFINE
+   endif
+   # gpu_star.cuf uses curand_device; -cudalib=curand adds -lcurand at link via
+   # pgacclnk (/usr/bin/ld), so we must also supply -L to cuda/math lib dirs.
+   GPU_LIBS = -gpu=$(CUDA_ARCH) -cuda -cudalib=nvtx,curand
+   ifeq ($(FASTMATH),1)
+      GPU_LIBS += -gpu=fastmath
+   endif
+   FFLAGS = -mp -cpp $(GPU_LIBS) -D_CUDA $(DEFINES)
+   NVHPC_EXTRA_LIBS :=
+   ifneq ($(NVHPC_CUDA_HOME),)
+      NVHPC_SDK_ROOT := $(abspath $(NVHPC_CUDA_HOME)/../..)
+      NVHPC_EXTRA_LIBS += -L$(NVHPC_CUDA_HOME)/lib64 -L$(NVHPC_SDK_ROOT)/math_libs/lib64
+   endif
+   ifneq ($(NVHPC_MATH_LIB),)
+      NVHPC_EXTRA_LIBS += -L$(NVHPC_MATH_LIB)
+   endif
+   ifeq ($(NVHPC_CUDA_HOME),)
+      NVHPC_EXTRA_LIBS += $(foreach d,$(wildcard /opt/nvidia/hpc_sdk/Linux_x86_64/*/cuda/*/lib64),-L$(d))
+      NVHPC_EXTRA_LIBS += $(foreach d,$(wildcard /opt/nvidia/hpc_sdk/Linux_x86_64/*/math_libs/lib64),-L$(d))
+      NVHPC_EXTRA_LIBS += $(foreach d,$(wildcard /cm/shared/apps/nvhpc/*/Linux_x86_64/*/cuda/*/lib64),-L$(d))
+      NVHPC_EXTRA_LIBS += $(foreach d,$(wildcard /cm/shared/apps/nvhpc/*/Linux_x86_64/*/math_libs/lib64),-L$(d))
+   endif
+   LIBS = $(GPU_LIBS) $(NVHPC_EXTRA_LIBS) -lstdc++
+   GPU_PATH = ../gpu
+   ifeq ($(CUDA_PROFILE),1)
+      FFLAGS += -gpu=lineinfo,ptxinfo -Minstrument -traceback -gopt
+      LIBS += -gpu=lineinfo,ptxinfo -Minstrument -traceback -gopt
+   endif
+   ifeq ($(MPI),1)
+      F90 = $(MPIF90)
+      FC = nvfortran
+   else
+      F90 = nvfortran
+      FC = nvfortran
+      FFLAGS += -DWITHOUTMPI
+   endif
+   F90 += -Mfreeform
+   FC += -Mfreeform
+   ifeq ($(DEBUG),1)
+      # NB: do NOT add -Minit-real=snan here. With _CUDA, nvfortran emits a
+      # host-side sNaN memset over `device` allocatables (e.g. uold/unew) on
+      # allocation, which segfaults (SEGV_ACCERR) writing device memory. Any
+      # -Minit-real=<val> has the same problem, so it is simply omitted.
+      F90 += -O0 -traceback -g -gpu=debug,lineinfo -Mprof=dwarf
+      FFLAGS += -O0 -ffpe-trap=zero,overflow,invalid -g -gpu=debug,lineinfo -Mprof=dwarf
+   else
+      F90 += -O4
+   endif
+   ifeq ($(LINEINFO),1)
+      # LINEINFO on F90 and FFLAGS: CUF objects use $(F90) $(FFLAGS); link uses both.
+      # -Mprof=dwarf helps NCU resolve NVFortran device lineinfo past RDC acclnk.
+      F90 += -gpu=lineinfo -Mprof=dwarf
+      FFLAGS += -gpu=lineinfo -Mprof=dwarf
+   endif
+endif
+#############################################################################
+# TURB=1: link against FFTW= prefix; #include "fftw3.f" from FFTW_HEADER_DIR when staged.
+ifeq ($(TURB),1)
+ifndef FFTW
+$(error TURB=1 requires FFTW=install_prefix; harness sets FFTW via hackathon_load_fftw)
+endif
+ifdef FFTW_HEADER_DIR
+TURB_INC := -I$(FFTW_HEADER_DIR)
+else
+TURB_INC := -I$(FFTW)/include
+ifdef FFTW_VENDOR_INC
+TURB_INC += -I$(FFTW_VENDOR_INC)
+endif
+endif
+FFLAGS += $(TURB_INC)
+F90 += $(TURB_INC)
+endif
+#############################################################################
+# First CUDA_ARCH token for nvcc (-arch accepts one sm_XX at a time).
+comma := ,
+empty :=
+space := $(empty) $(empty)
+NVCC_ARCH := $(firstword $(subst $(comma),$(space),$(CUDA_ARCH)))
+C = ifort
+CFLAGS = -g -O3
+#############################################################################
+MOD = mod
+#############################################################################
+# MPI librairies if needed
+LIBMPI =
+#LIBMPI = -lfmpi -lmpi -lelan
+ifeq ($(HDF5),1)
+   LIBHDF5 = -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
+endif
+ifeq ($(TURB),1)
+ifndef FFTW
+$(error TURB=1 requires FFTW=install_prefix; harness loads fftw/nvhpc-21.5/3.3.9 via hackathon_load_fftw)
+endif
+ifneq ($(wildcard $(FFTW)/lib/libfftw3.so)$(wildcard $(FFTW)/lib/libfftw3.a),)
+FFTW_LIBDIR = $(FFTW)/lib
+else ifneq ($(wildcard $(FFTW)/lib64/libfftw3.so)$(wildcard $(FFTW)/lib64/libfftw3.a),)
+FFTW_LIBDIR = $(FFTW)/lib64
+else ifneq ($(wildcard $(FFTW)/lib64/libfftw3.so*),)
+FFTW_LIBDIR = $(FFTW)/lib64
+else ifneq ($(wildcard $(FFTW)/lib/libfftw3.so*),)
+FFTW_LIBDIR = $(FFTW)/lib
+else
+# Stellar nvhpc FFTW: lib64 even when wildcard misses on login node
+FFTW_LIBDIR = $(FFTW)/lib64
+endif
+   LIBFFTW = -L$(FFTW_LIBDIR) -lfftw3
+endif
+LIBS += $(LIBMPI) $(LIBFFTW)
+#############################################################################
+# Sources directories are searched in this exact order
+VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../turb:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt:../lightcone
+#############################################################################
+# Modules
+MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
+	 hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
+	 hydro_commons.o rt_commons.o amr_commons.o poisson_parameters.o rngstream.o \
+	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
+	 coolrates_module.o \
+	 collisional_ionization_module.o recombination_module.o \
+	 cosmic_ray_ionization_module.o photoionization_UVB_module.o dust_recombination_module.o \
+	 molecules_module.o charge_exchange_module.o rtz_module.o
+ifeq ($(RTZ),1)
+MODOBJ += rtz_coolrates_module.o rtz_cooling_module.o
+else
+MODOBJ += neq_cooling_module.o 
+endif
+MODOBJ += init_neq_chem.o clfind_commons.o turb_commons.o mdl_commons.o mdl.o \
+	 cross_sections_module.o rt_spectra.o  \
+	 ramses_commons.o call_back.o cache_commons.o cache.o gadgetreadfile.o \
+	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
+	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o marshal.o
+ifeq ($(COMPILER),NVHPC)
+MODOBJ += cub_module_radix_sort_c.o cub_module_radix_sort_f.o cub_inclusive_scan_c.o cub_inclusive_scan_f.o gpu_utils.o gpu_hydro.o gpu_cooling.o gpu_star.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o gpu_runner.o gpu_part.o gpu_manager.o
+endif
+MODOBJ += rho_fine.o
+MODOBJ +=  upload.o init_xion.o \
+	 rt_flux_module.o rt_godunov_fine.o rt_input_condinit.o rt_init_flow_fine.o rt_units.o  \
+	 rt_condinit.o rt_flag.o rt_upload.o interpol_rt.o rt_godunov_utils.o read_rt_params.o \
+	 turb_hydro.o turb_driving.o turb_init.o turb_update.o \
+	 lightcone_utils.o lightcone_buffer.o lightcone_io.o lightcone_test.o lightcone.o \
+	 init_hydro.o init_part.o init_amr.o smooth.o flag_utils.o init_time.o read_params.o \
+	 init_rt.o input_part_grafic.o input_part_zoom.o input_part_ascii.o \
+	 input_part_restart.o input_part_ramses.o input_part_gadget.o input_part.o input_hydro_grafic.o \
+	 interpol_hydro.o update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
+	 grav_ana.o interpol_phi.o phi_fine_cg.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
+	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
+	 godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
+	 input_hydro_condinit.o input_hydro_gadget.o init_flow_fine.o \
+	 condinit.o vecpotentialinit.o init_refine_adaptive.o init_refine_restart.o \
+	 init_refine_ramses.o title.o units.o move_fine.o rho_ana.o \
+	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o \
+	 rt_star_feedback.o sink_formation.o tree_formation.o \
+	 sink_evolution.o sink_merger.o task_manager.o rt_step.o amr_step.o adaptive_loop.o \
+	 write_gitinfo.o
+#############################################################################
+ramses:	$(MODOBJ) ramses.o
+	$(F90) $(FFLAGS) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)
+#############################################################################
+test_cooling:	$(MODOBJ) test_cooling.o
+	$(F90) $(FFLAGS) $(MODOBJ) test_cooling.o -o test_cooling $(LIBS)
+#############################################################################
+write_gitinfo.o: FORCE
+	$(FC) -O0 -cpp -DPATCH=\'"$(PATCH)"\' -DGITBRANCH=\'"$(GITBRANCH)"\' -DGITHASH=\'"$(GITHASH)"\' \
+                -DGITREPO=\'"$(GITREPO)"\' -DBUILDDATE=\'"$(BUILDDATE)"\' -DBUILDCOMMAND=\'"$(BUILDCOMMAND)"\' -c ../amr/write_gitinfo.f90 -o $@
+#############################################################################
+cub_inclusive_scan_c.o: cub_inclusive_scan.h cub_inclusive_scan.cu
+	nvcc -arch=$(NVCC_ARCH) -O3 -lineinfo -c $(GPU_PATH)/cub_inclusive_scan.cu -o cub_inclusive_scan_c.o
+cub_inclusive_scan_f.o: cub_inclusive_scan.cuf cub_inclusive_scan_c.o
+	nvfortran $(FFLAGS) -c cub_inclusive_scan_c.o $(GPU_PATH)/cub_inclusive_scan.cuf -o cub_inclusive_scan_f.o
+cub_module_radix_sort_c.o: cub_module_radix_sort.h cub_module_radix_sort.cu
+	nvcc -arch=$(NVCC_ARCH) -O3 -lineinfo -c $(GPU_PATH)/cub_module_radix_sort.cu -o cub_module_radix_sort_c.o
+cub_module_radix_sort_f.o: cub_module_radix_sort.cuf cub_module_radix_sort_c.o
+	nvfortran $(FFLAGS) -c cub_module_radix_sort_c.o $(GPU_PATH)/cub_module_radix_sort.cuf -o cub_module_radix_sort_f.o
+#############################################################################
+# Explicit rules for GPU CUDA Fortran sources (bypasses VPATH)
+ifeq ($(COMPILER),NVHPC)
+GPU_CUF_OBJS = gpu_utils.o gpu_hydro.o gpu_cooling.o gpu_star.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o gpu_runner.o gpu_part.o
+$(GPU_CUF_OBJS): %.o: $(GPU_PATH)/%.cuf
+	$(F90) $(FFLAGS) -c $< -o $@
+gpu_manager.o: $(GPU_PATH)/gpu_manager.f90
+	$(F90) $(FFLAGS) -c $< -o $@
+# mg_device (gpu_mg.cuf) uses module from gpu_utils.cuf
+gpu_mg.o: gpu_utils.o
+# CUDA Fortran modules below `use gpu_utils`; require gpu_utils.mod first even
+# for serial clean-tree builds because make's object-list order is not a module
+# dependency contract.
+gpu_hydro.o: gpu_utils.o
+gpu_star.o: gpu_utils.o
+gpu_rho.o: gpu_utils.o
+gpu_refine.o: gpu_utils.o
+gpu_flag.o: gpu_utils.o
+gpu_runner.o: gpu_utils.o cub_inclusive_scan_f.o cub_module_radix_sort_f.o
+# gpu_runner.cuf uses hydro/cooling/star/rho/mg/refine/flag *_device modules from separate
+# gpu_*.cuf units; MODOBJ listing order is not a build-order guarantee for -j1.
+gpu_runner.o: gpu_hydro.o gpu_cooling.o gpu_star.o gpu_rho.o gpu_mg.o gpu_refine.o gpu_flag.o
+# cooling_fine.f90 uses gpu_runner (via #ifdef _CUDA) so must build after it
+cooling_fine.o: gpu_runner.o
+# gpu_part.cuf is its own CUDA Fortran module (part_device); it uses
+# gpu_runner for particle device state + mesh / hash / scan scratch,
+# refine_device for swap-table helpers, and includes
+# gpu_hash/gpu_hilbert/gpu_reduce as private helpers.
+gpu_part.o: gpu_utils.o gpu_runner.o gpu_refine.o cub_module_radix_sort_f.o
+gpu_part.o: $(GPU_PATH)/gpu_hash.cuf $(GPU_PATH)/gpu_hilbert.cuf $(GPU_PATH)/gpu_reduce.cuf
+gpu_manager.o: gpu_runner.o turb_commons.o
+ifeq ($(TURB),1)
+# turb_commons.f90 #include "fftw3.f" — TURB_INC on FFLAGS (FFTW_HEADER_DIR when staged).
+turb_commons.o: ../turb/turb_commons.f90
+	$(F90) $(FFLAGS) -c $< -o $@
+endif
+# Fortran sources below `use gpu_runner` / `use gpu_manager` / `use part_device`
+# under _CUDA. Keep these dependencies explicit so parallel or partially stale
+# builds do not try to compile them before the .mod files exist.
+phi_fine_cg.o: gpu_runner.o
+multigrid_fine_commons.o: gpu_runner.o
+multigrid_fine_coarse.o: gpu_runner.o
+interpol_phi.o: gpu_runner.o
+force_fine.o: gpu_runner.o
+smooth.o: gpu_runner.o
+refine_utils.o: gpu_runner.o
+flag_utils.o: gpu_runner.o
+init_amr.o: gpu_runner.o
+# turbulence GPU dispatch: leaf branches call gpu_runner / gpu_manager launchers.
+turb_driving.o: gpu_runner.o
+turb_hydro.o: gpu_runner.o
+turb_update.o: gpu_manager.o
+turb_init.o: gpu_manager.o
+init_part.o: gpu_runner.o gpu_part.o
+upload.o: gpu_runner.o
+courant_fine.o: gpu_runner.o
+godunov_fine.o: gpu_runner.o
+synchro_hydro_fine.o: gpu_runner.o
+cooling_fine.o: gpu_runner.o
+rho_fine.o: gpu_runner.o gpu_part.o gpu_manager.o
+move_fine.o: gpu_part.o gpu_manager.o
+amr_step.o: gpu_manager.o
+task_manager.o: gpu_manager.o
+adaptive_loop.o: gpu_manager.o
+endif
+#############################################################################
+%.o:%.cuf
+	$(F90) $(FFLAGS) -c $< -o $@
+%.o:%.f90
+	$(F90) $(FFLAGS) -c $< -o $@
+%.o:%.c
+	$(C) $(CFLAGS) -c $^ -o $@
+FORCE:
+#############################################################################
+clean :
+	rm -f *.o *.$(MOD)
+
+clobber: clean
+	-find . -type d -name "NDIM*" -prune -exec rm -rf '{}' \;
+#############################################################################

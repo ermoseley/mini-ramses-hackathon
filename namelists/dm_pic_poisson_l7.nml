@@ -1,0 +1,60 @@
+! DM-only GPU PM smoke case (levelmin=levelmax=7, periodic, ~2M DM particles).
+! Drives the GPU CIC deposit + MG Poisson path with no AMR refinement.
+! initfile(1) is overridden by the SLURM wrapper (IC_DIR env var).
+!
+! ics_ramses/ is a cosmological grafic set (ic_velcx/y/z + ic_deltab).
+! cosmo must be .true. — with cosmo=.false. init_file looks for ic_d instead.
+
+&RUN_PARAMS
+ cosmo=.true.
+ pic=.true.
+ poisson=.true.
+ hydro=.false.
+ nrestart=0
+ ncontrol=1
+ nstepmax=5
+ nsubcycle=1,1
+ nremap=10
+ verbose=.true.
+ debug=.false.
+ nsuperoct=2
+/
+
+&AMR_PARAMS
+ levelmin=7
+ levelmax=7
+ ngridmax=1600000
+ ncachemax=1600000
+ nexpand=1
+ boxlen=1.0
+ npartmax=8000000
+/
+
+&INIT_PARAMS
+ filetype='grafic'
+ initfile(1)='__ABSOLUTE_IC_DIR_SET_BY_SLURM__'
+/
+
+&OUTPUT_PARAMS
+ nfile=1
+ delta_tout=0.05
+ tend=0.1
+ foutput=5
+/
+
+&POISSON_PARAMS
+ epsilon=1.d-4
+ part_mass_deposition_scheme=1
+ part_dep_algo=2
+ part_force_interpolation_scheme=1
+/
+
+&UNITS_PARAMS
+ units_density=1.0d0
+ units_length=1.0d0
+ units_time=1.0d0
+/
+
+&BOUNDARY_PARAMS
+ periodic=.true.,.true.,.true.
+/

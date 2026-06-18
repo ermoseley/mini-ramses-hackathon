@@ -1,0 +1,46 @@
+! Cosmological dark-matter-only run (mini-ramses-dev/namelist/dmo.nml without
+! &CLUMP_PARAMS). initfile(1) is rewritten by dmo_cpu.slurm / dmo_gpu.slurm
+! from ${IC_DIR}.
+!
+! This namelist performs a cosmological simulation with dark matter only.
+! You need a grafic file for the initial conditions.
+
+&RUN_PARAMS
+cosmo=.true.
+pic=.true.
+poisson=.true.
+hydro=.false.
+nrestart=0
+nstepmax=1000
+nsubcycle=1,1,2
+ncontrol=1
+verbose=.false.
+/
+
+&OUTPUT_PARAMS
+delta_aout=0.1
+aend=1.0
+/
+
+&INIT_PARAMS
+filetype='grafic'
+initfile(1)='ics_ramses'
+/
+
+&AMR_PARAMS
+levelmin=7
+levelmax=15
+ngridmax=4000000
+ncachemax=2000000
+npartmax=4000000
+nexpand=1,
+/
+
+&POISSON_PARAMS
+epsilon=1.d-4
+part_dep_algo=2
+/
+
+&REFINE_PARAMS
+m_refine=10*8.,
+/

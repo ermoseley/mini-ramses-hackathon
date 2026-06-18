@@ -1,0 +1,84 @@
+! Cosmological zoom-in DM + gas (mini-ramses-dev/namelist/cosmo_zoom.nml adapted for
+! mini-ramses-dev/gpu). Isothermal gas only — no cooling, metals, star formation,
+! or clump finding. Grafic zoom ICs: __ZOOM_IC_DIR__/level_007 .. level_010.
+! Download example ICs (tigress) per load_zoom_ic.sh / cosmo_zoom.nml header:
+!   ${MINIRAM}/utils/scripts/load_zoom_ic.sh  ->  ~/hackathon/ics_zoom/
+!
+! Compile the GPU binary with HYDRO=1, e.g.:
+!   make CUDA_ARCH=sm_80 NPRE=8 FASTMATH=1 COMPILER=NVHPC NHILBERT=1 GRAV=1 HYDRO=1 NDIM=3 UNITS=COSMO ramses
+
+&RUN_PARAMS
+ cosmo=.true.
+ pic=.true.
+ poisson=.true.
+ hydro=.true.
+ nrestart=0
+ nstepmax=1000
+ nsubcycle=1,1,2
+ ncontrol=1
+ nremap=10
+ verbose=.false.
+ debug=.false.
+ nsuperoct=2
+/
+
+&OUTPUT_PARAMS
+ delta_aout=0.1
+ aend=1.0
+/
+
+&INIT_PARAMS
+ filetype='grafic_zoom'
+ initfile(1)='__ZOOM_IC_DIR__/level_007'
+ initfile(2)='__ZOOM_IC_DIR__/level_008'
+ initfile(3)='__ZOOM_IC_DIR__/level_009'
+ initfile(4)='__ZOOM_IC_DIR__/level_010'
+/
+
+&AMR_PARAMS
+ levelmin=7
+ levelmax=15
+ ngridmax=24000000
+ ncachemax=2000000
+ npartmax=4000000
+ nexpand=5,5,1,1
+ boxlen=1.0
+/
+
+&POISSON_PARAMS
+ epsilon=1.d-4
+ part_mass_deposition_scheme=1
+ part_dep_algo=2
+ part_force_interpolation_scheme=1
+/
+
+&HYDRO_PARAMS
+ gamma=1.6666667
+ courant_factor=0.8
+ slope_type=1
+ riemann='hll'
+/
+
+&COOLING_PARAMS
+ ! Match RAMSES no-cooling grafic init (input_hydro_grafic.f90):
+ !   T2_start = 1.356d-2/aexp**2  (K, T/mu)
+ isothermal=.true.
+ eos_type=1
+ eos_T2=35.269558d0
+/
+
+&REFINE_PARAMS
+ m_refine=10*8.,
+ interpol_var=1
+ interpol_type=0
+/
+
+&UNITS_PARAMS
+ units_density=1.0d0
+ units_length=1.0d0
+ units_time=1.0d0
+/
+
+&BOUNDARY_PARAMS
+ periodic=.true.,.true.,.true.
+/

@@ -1,0 +1,66 @@
+! DMO GPU PM AMR case (levelmin=7, levelmax=8, cosmological units).
+! Drives the GPU CIC deposit + MG Poisson with one level of AMR refinement.
+! initfile(1) is overridden by the SLURM wrapper (IC_DIR env var).
+! Runtime length is set by SLURM wrappers, not this template:
+!   test_gpu_dmo_a100.slurm      -> 100 steps / tend=1.5 (validation suite)
+!   test_gpu_dmo_amr_long.slurm  -> 250 steps / tend=3.0 (long run)
+! Override via AMR_NSTEPMAX, AMR_FOUTPUT, AMR_TEND when submitting.
+
+&RUN_PARAMS
+ cosmo=.true.
+ pic=.true.
+ poisson=.true.
+ hydro=.false.
+ nrestart=0
+ ncontrol=1
+ nstepmax=250
+ nsubcycle=1,1
+ nremap=10
+ verbose=.true.
+ debug=.true.
+ nsuperoct=2
+/
+
+&AMR_PARAMS
+ levelmin=7
+ levelmax=8
+ ngridmax=4000000
+ ncachemax=4000000
+ nexpand=0
+ boxlen=1.0
+ npartmax=8000000
+/
+
+&INIT_PARAMS
+ filetype='grafic'
+ initfile(1)='/scratch/gpfs/moseley/hackathon/ics_ramses'
+/
+
+&OUTPUT_PARAMS
+ nfile=1
+ delta_tout=0.05
+ tend=3.0
+ foutput=25
+/
+
+&POISSON_PARAMS
+ epsilon=1.d-4
+ part_mass_deposition_scheme=1
+ part_dep_algo=2
+ part_force_interpolation_scheme=1
+/
+
+&REFINE_PARAMS
+ m_refine=8.0, -1.0
+ mass_cut_refine=-1.0
+/
+
+&UNITS_PARAMS
+ units_density=1.0d0
+ units_length=1.0d0
+ units_time=1.0d0
+/
+
+&BOUNDARY_PARAMS
+ periodic=.true.,.true.,.true.
+/
