@@ -14,6 +14,7 @@
 #   ./submit_profiles.sh dmo-gpu      # cosmological DMO (dmo.nml), GPU
 #   ./submit_profiles.sh cosmo-gpu    # cosmological DM+gas (cosmo.nml), GPU HYDRO=1
 #   ./submit_profiles.sh debug-cosmo  # cosmo debug (Makefile.debug-cosmo, NPRE=8)
+#   ./submit_profiles.sh debug-cosmo-cpu-unigrid  # 96-rank CPU unigrid parity smoke
 #   ./submit_profiles.sh cosmo-zoom   # cosmological zoom DM+gas (cosmo_zoom.nml), GPU HYDRO=1
 #   ./submit_profiles.sh brio-wu      # 3D Brio-Wu MHD shock tube (brio_wu.nml), GPU MHD=1 HLLD, 128^3 unigrid
 #   ./submit_profiles.sh mhd-turb     # 3D driven MHD turbulence (mhd_turb.nml), GPU MHD=1 TURB=1 HLLD, 64^3 unigrid, uniform IC Bz=4
@@ -328,6 +329,61 @@ case "${cmd}" in
     DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-0}" \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-06:00:00}" dmo_gpu.slurm
+    ;;
+  debug-cosmo-unigrid)
+    # GPU unigrid L7 parity case (debug_cosmo_unigrid.nml, rteyssie caps).
+    echo "== debug-cosmo-unigrid: Makefile.debug-cosmo NVHPC=${NVHPC_MODULE:-nvhpc/25.5}"
+    export IC_DIR="${IC_DIR:-${HARNESS_DIR}/ics_ramses}"
+    export NVHPC_MODULE=nvhpc/25.5
+    export NVHPC_MODULE_STRICT=1
+    export GPU_BUILD_MINIMAL=1
+    export DMO_NO_DEFAULT_CAPS=1
+    export GPU_HYDRO=1
+    export GPU_GRAV=1
+    export GPU_UNITS=COSMO
+    export GPU_CUDA_ARCH="${GPU_CUDA_ARCH}"
+    [[ -n "${DMO_NSTEPMAX:-}" ]] && export DMO_NSTEPMAX
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.hydro}" \
+    NML="$(hackathon_nml debug_cosmo_unigrid.nml)" PROFILE=run \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-0}" \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-02:00:00}" dmo_gpu.slurm
+    ;;
+  debug-cosmo-cpu)
+    # 96-rank MPI CPU baseline for debug-cosmo (HYDRO+GRAV+UNITS=COSMO, NPRE=8).
+    # Full pu node via dmo_cpu.slurm. BUILD_CPU=1 builds on login before submit.
+    export IC_DIR="${IC_DIR:-${HARNESS_DIR}/ics_ramses}"
+    export CPU_HYDRO=1
+    export CPU_GRAV=1
+    export CPU_UNITS=COSMO
+    export CPU_NPRE=8
+    export DMO_NO_DEFAULT_CAPS=1
+    export GCC_MODULE="${GCC_MODULE:-gcc-toolset/10}"
+    export OPENMPI_MODULE="${OPENMPI_MODULE:-openmpi/gcc-toolset-10/4.1.0}"
+    export OPENMPI_USE_MODULES="${OPENMPI_USE_MODULES:-1}"
+    BIN_CPU="${BIN_CPU:-${MINIRAM}/bin/ramses3d.cpu}"
+    cpu_nml="${DEBUG_COSMO_CPU_NML:-debug_cosmo_cpu.nml}"
+    echo "== debug-cosmo-cpu: NML=${cpu_nml} BUILD_CPU=${BUILD_CPU:-1} NPRE=8"
+    if [[ "${BUILD_CPU:-1}" == "1" ]]; then
+      hackathon_build_cpu_binary || exit 1
+    elif [[ ! -x "${BIN_CPU}" ]]; then
+      echo "ERROR: pre-built CPU binary not found: ${BIN_CPU}" >&2
+      echo "       BUILD_CPU=1 to compile on login." >&2
+      exit 1
+    fi
+    BUILD_BINARIES=0 \
+    BIN_CPU="${BIN_CPU}" \
+    NML="$(hackathon_nml "${cpu_nml}")" \
+      hackathon_sbatch ${DMO_SLURM_MEM:+--mem="${DMO_SLURM_MEM}"} \
+        --time="${DMO_SLURM_TIME:-06:00:00}" dmo_cpu.slurm
+    ;;
+  debug-cosmo-cpu-unigrid)
+    # CPU unigrid smoke: 50 main steps by default (override DMO_NSTEPMAX).
+    export DMO_NSTEPMAX="${DMO_NSTEPMAX:-50}"
+    DEBUG_COSMO_CPU_NML=debug_cosmo_unigrid_cpu.nml \
+    DMO_SLURM_TIME="${DMO_SLURM_TIME:-02:00:00}" \
+      "$0" debug-cosmo-cpu
     ;;
   cosmo-zoom)
     # Cosmological zoom-in DM + isothermal gas (cosmo_zoom.nml). Zoom ICs under
@@ -769,6 +825,9 @@ Hackathon profile launcher (run from ${HARNESS})
   ./submit_profiles.sh dmo-gpu-cic-slow  CIC slow path (dmo_cic_slow.nml, 30 steps)
   ./submit_profiles.sh cosmo-gpu     cosmo.nml DM+gas (HYDRO=1, ramses3d.hydro; LAUNCH_BLOCKING on)
   ./submit_profiles.sh debug-cosmo   debug_cosmo.nml cosmo (Makefile.debug-cosmo, NPRE=8, isothermal HLLC)
+  ./submit_profiles.sh debug-cosmo-unigrid  debug_cosmo_unigrid.nml GPU unigrid L7 parity
+  ./submit_profiles.sh debug-cosmo-cpu  debug_cosmo_cpu.nml 96-rank MPI (HYDRO+GRAV+UNITS=COSMO NPRE=8)
+  ./submit_profiles.sh debug-cosmo-cpu-unigrid  unigrid CPU smoke (50 steps default)
   ./submit_profiles.sh cosmo-zoom    cosmo_zoom.nml zoom DM+gas (NPRE=8, FASTMATH=1, ngridmax=24M)
   ./submit_profiles.sh brio-wu       brio_wu.nml 3D Brio-Wu MHD shock tube (MHD=1, HLLD, 128^3 unigrid; auto ICs)
   ./submit_profiles.sh mhd-turb      mhd_turb.nml 3D driven MHD turbulence (MHD=1 TURB=1, 64^3 unigrid, uniform IC Bz=4; gpu_turb)

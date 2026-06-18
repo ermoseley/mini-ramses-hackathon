@@ -254,7 +254,8 @@ ifeq ($(COMPILER),NVHPC)
       F90 += -O0 -traceback -g -gpu=debug,lineinfo -Mprof=dwarf
       FFLAGS += -O0 -ffpe-trap=zero,overflow,invalid -g -gpu=debug,lineinfo -Mprof=dwarf
    else
-      F90 += -O4
+      # -O4 can SIGILL on Stellar A100 at startup; -O2 is safe for debug-cosmo.
+      F90 += -O2
    endif
    ifeq ($(LINEINFO),1)
       # LINEINFO on F90 and FFLAGS: CUF objects use $(F90) $(FFLAGS); link uses both.

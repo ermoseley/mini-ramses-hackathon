@@ -1,9 +1,7 @@
-! debug-cosmo: rteyssie develop cosmological DM+gas (isothermal, star off).
-! GPU single-rank caps: ngridmax=6M npartmax=4M ncachemax=4M (see debug_cosmo_cpu.nml /96).
-! Grafic ICs on Stellar scratch (ic_deltab + ic_velcx/y/z). dmo_gpu.slurm rewrites
-! initfile(1) to short symlink ic_grafic when IC_DIR is set; absolute path below is
-! the canonical IC root for manual runs and when DMO_NO_DEFAULT_CAPS=1.
-! Build: ~/hackathon/Makefile.debug-cosmo (NPRE=8), not repo bin/Makefile.
+! debug-cosmo unigrid (levelmin=levelmax=7) for GPU/CPU parity checks.
+! GPU single-rank totals (rteyssie caps). Use debug_cosmo_unigrid_cpu.nml for
+! 96-rank MPI (per-process caps = totals / 96).
+! initfile(1) rewritten by dmo_* slurm from ${IC_DIR}.
 
 &RUN_PARAMS
 cosmo=.true.
@@ -22,12 +20,12 @@ aout=0.5
 
 &INIT_PARAMS
 filetype='grafic'
-initfile(1)='/scratch/gpfs/moseley/hackathon/ics_ramses'
+initfile(1)='ics_ramses'
 /
 
 &AMR_PARAMS
 levelmin=7
-levelmax=15
+levelmax=7
 ngridmax=6000000
 npartmax=4000000
 ncachemax=4000000

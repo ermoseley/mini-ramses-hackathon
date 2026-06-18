@@ -34,6 +34,8 @@ NML="${NML:-${HARNESS_DIR}/dmo.nml}"
 DMO_NSTEPMAX="${DMO_NSTEPMAX:-1000}"
 DMO_FOUTPUT="${DMO_FOUTPUT:-25}"
 DMO_TEND="${DMO_TEND:-3.0}"
+# When DMO_NO_DEFAULT_CAPS=1 (debug-cosmo-cpu), keep staged namelist caps unchanged.
+DMO_NO_DEFAULT_CAPS="${DMO_NO_DEFAULT_CAPS:-0}"
 CPU_MHD="${CPU_MHD:-0}"
 if [[ -z "${BIN_CPU:-}" ]]; then
   if [[ "${CPU_MHD}" == "1" ]]; then
@@ -124,9 +126,14 @@ apply_kv() {
     rm -f "${file}.bak"
   fi
 }
-apply_kv nstepmax "${DMO_NSTEPMAX}" "${run_nml}"
-apply_kv foutput  "${DMO_FOUTPUT}"  "${run_nml}"
-apply_kv tend     "${DMO_TEND}"     "${run_nml}"
+if [[ "${DMO_NO_DEFAULT_CAPS}" == "1" ]]; then
+  :
+else
+  apply_kv nstepmax "${DMO_NSTEPMAX}" "${run_nml}"
+  apply_kv foutput  "${DMO_FOUTPUT}"  "${run_nml}"
+  apply_kv tend     "${DMO_TEND}"     "${run_nml}"
+fi
+[[ -n "${DMO_NSTEPMAX:-}" && "${DMO_NO_DEFAULT_CAPS}" == "1" ]] && apply_kv nstepmax "${DMO_NSTEPMAX}" "${run_nml}"
 [[ -n "${DMO_AEND:-}" ]] && apply_kv aend "${DMO_AEND}" "${run_nml}"
 hackathon_apply_part_dep_algo "${run_nml}"
 
