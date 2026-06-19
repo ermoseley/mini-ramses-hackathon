@@ -236,10 +236,15 @@ hackathon_ensure_orszag_tang_ics() {
     return 1
   fi
   local py="${PYTHON:-python3}"
+  local dust_flag=()
+  if [[ "${ORSZAG_TANG_DUST:-0}" == "1" ]]; then
+    dust_flag=(--dust)
+    echo "== orszag-tang dust ICs: will write zero ic_velcx/cy/cz (set ORSZAG_TANG_DUST=0 to skip)"
+  fi
   mkdir -p "${ic_dir}"
   # orszag_tang.py imports the sibling grafic.py, so run from its own directory;
   # --outdir accepts an absolute path (the script chdir's into it to write files).
-  ( cd "$(dirname "${gen}")" && "${py}" "$(basename "${gen}")" "${level}" --ndim 3 --size 1.0 --outdir "${ic_dir}" )
+  ( cd "$(dirname "${gen}")" && "${py}" "$(basename "${gen}")" "${level}" --ndim 3 --size 1.0 "${dust_flag[@]}" --outdir "${ic_dir}" )
   if [[ ! -f "${ic_dir}/ic_bxleft" ]]; then
     echo "ERROR: orszag-tang IC generation failed; expected ${ic_dir}/ic_bxleft" >&2
     ls -la "${ic_dir}" >&2 || true

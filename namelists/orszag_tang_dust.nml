@@ -1,0 +1,71 @@
+! Orszag-Tang vortex + GPU dust (256^3, level 8, 1 dust grain per cell at rest)
+! MHD test for mini-ramses-dev gpu_dust branch. Same hydro/MHD setup as
+! orszag_tang.nml with dust=.true. and ndust_per_cell=1.
+!
+! ICs: mini-ramses-dev/utils/py/grafic/orszag_tang.py with --dust flag:
+!   python3 orszag_tang.py 8 --ndim 3 --size 1.0 --dust --outdir <ic_dir>
+! Dust positions are placed at cell centres by input_part_grafic.f90; only
+! zero-velocity files (ic_velcx/cy/cz) are required from the generator.
+!
+! Build (Marlowe H100, serial make only):
+!   make -f Makefile.h100 COMPILER=NVHPC CUDA_ARCH=sm_90 \
+!        HYDRO=1 MHD=1 GRAV=0 NPRE=8 NDIM=3 ramses
+!
+! GPU-MEMORY NOTE: 256^3 OT + 16M dust grains is heavy; use an 80 GB H100 and
+! monitor GPU memory during the interactive session.
+
+&RUN_PARAMS
+ cosmo=.false.
+ hydro=.true.
+ poisson=.false.
+ pic=.false.
+ nrestart=0
+ nstepmax=10000
+ nsubcycle=10*1,
+ ncontrol=1
+ nsuperoct=2
+ verbose=.false.
+ debug=.false.
+/
+
+&OUTPUT_PARAMS
+ delta_tout=0.25
+ tend=0.5
+/
+
+&INIT_PARAMS
+ filetype='grafic'
+ initfile(1)='ic_grafic'
+/
+
+&AMR_PARAMS
+ levelmin=8
+ levelmax=8
+ ngridmax=2500000
+ ncachemax=200000
+ nexpand=1,
+ boxlen=1.0
+/
+
+&HYDRO_PARAMS
+ gamma=1.6666667
+ courant_factor=0.8
+ slope_type=2
+ slope_mag_type=2
+ riemann='hlld'
+ riemann2d='hlld'
+/
+
+&BOUNDARY_PARAMS
+ periodic=.true.,.true.,.true.
+/
+
+&DUST_PARAMS
+ dust=.true.
+ ndusttot=16777216
+ ndustmax=16777216
+ ndust_per_cell=1
+ grain_size_parameter=0.1
+ grain_charge_parameter=100.0
+ dust_force_interpolation_scheme=1
+/
