@@ -77,13 +77,82 @@ Then: `bin/marlowe_login.sh` once, then `bin/marlowe_remote.sh '…'`.
 
 Scratch harness: `/scratch/m000115/emoseley/hackathon-repo` (clone of this repo, branch `new_branch`) or `/scratch/m000115/hackathon`.
 
+
+## Marlowe MHD Mach-10 workflow (128³ then 512³)
+
+**Order:** interactive **128³** smoke on `preempt` before batch **512³** HLLD.
+
+Scratch harness (preferred clone):
+
+```bash
+export CLUSTER=marlowe
+export HARNESS_DIR=/scratch/m000115/emoseley/hackathon-repo
+cd "${HARNESS_DIR}"
+git pull
+source bin/hackathon-env.sh
+export MINIRAM=~/ramses-development/mini-ramses-dev   # or ~/mini-ramses-dev on cluster
+export MINIRAM_EXPECTED_BRANCH=gpu_turb
+export GPU_NPRE=4
+```
+
+### SSH (local Mac / agent)
+
+See **Marlowe SSH (ControlMaster)** above. One-time auth:
+
+```bash
+cd "${HARNESS_DIR:-$HOME/ramses-development/mini-ramses-hackathon}"
+bin/marlowe_login.sh
+bin/marlowe_remote.sh 'hostname'
+```
+
+### 128³ interactive smoke (`preempt`)
+
+Same physics family as 512³: `beta=0.1`, `turb_T=0.1`, parabolic driving, **HLLD**, `turb_rms=26.457513` (M≈10; `utils/py/plot_mach_turb_rms_theory.py` in mini-ramses-dev).
+
+Allocate one H100 on the preempt partition (build on the GPU node if needed):
+
+```bash
+salloc --account=marlowe-m000115 --partition=preempt -G 1 --mem=80G --time=02:00:00
+# on the compute node (run in-shell, do not sbatch from inside salloc):
+cd /scratch/m000115/emoseley/hackathon-repo
+source bin/hackathon-env.sh
+export MINIRAM=~/ramses-development/mini-ramses-dev MINIRAM_EXPECTED_BRANCH=gpu_turb GPU_NPRE=4
+hackathon_load_fftw
+export MHD_TURB_BZ=0.7792435587233456
+hackathon_ensure_mhd_turb_ics 7
+export IC_DIR GPU_HYDRO=1 GPU_MHD=1 GPU_TURB=1 GPU_GRAV=0 BUILD_BINARIES=1
+export NML="$(hackathon_nml mhd_turb_full_l7_m10.nml)"
+export BIN_GPU="${MINIRAM}/bin/ramses3d.mhd.turb" DMO_TEND=0.05 DMO_FOUTPUT=1000000 PROFILE=run
+bash slurm/dmo_gpu.slurm
+```
+
+Pass criteria: `run.log` shows **`emag > 0` at step 1**, no CUDA OOM, sane timestep count for `tend=0.05`.
+
+Alternative one-liner (login → GPU shell):
+
+```bash
+srun --account=marlowe-m000115 --partition=preempt -G 1 --mem=80G --time=02:00:00 --pty bash -l
+```
+
+### 512³ batch (after 128³ pass)
+
+```bash
+cd /scratch/m000115/emoseley/hackathon-repo
+source bin/hackathon-env.sh
+export MINIRAM=~/ramses-development/mini-ramses-dev GPU_NPRE=4
+DMO_SLURM_TIME=06:00:00 ./submit_profiles.sh mhd-turb-l9-m10
+```
+
+Namelist: `namelists/mhd_turb_full_l9_m10.nml` (`levelmax=9`, `tend=0.5`, HLLD, tuned `ngridmax`/`ncachemax` for one H100).
+
 ## MHD turbulence run dirs (canonical namelists in `namelists/`)
 
 | Case | Namelist | Notes |
 | --- | --- | --- |
 | 256³ HLLD | `mhd_turb_full_l8.nml` | Stellar reference; `./submit_profiles.sh mhd-turb-l8-full` |
 | 256³ LLF | `mhd_turb_full_l8_llf.nml` | `./submit_profiles.sh mhd-turb-l8-llf` |
-| 512³ M≈10 HLLD | `mhd_turb_full_l9_m10.nml` | Marlowe H100; `./submit_profiles.sh mhd-turb-l9-m10` |
+| 128³ M≈10 HLLD smoke | `mhd_turb_full_l7_m10.nml` | Marlowe preempt interactive; `./submit_profiles.sh mhd-turb-l7-m10` |
+| 512³ M≈10 HLLD | `mhd_turb_full_l9_m10.nml` | Marlowe H100 batch 6 h; `DMO_SLURM_TIME=06:00:00 ./submit_profiles.sh mhd-turb-l9-m10` |
 
 Job workdirs land under `${RUN_DIR}/dmo_gpu_<jobid>/<case>/` unless you use a custom Slurm script in scratch (legacy Stellar: `/scratch/gpfs/moseley/hackathon/mhd_turb_l8_a200_beta01/`).
 

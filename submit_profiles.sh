@@ -493,10 +493,11 @@ case "${cmd}" in
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" dmo_gpu.slurm
     ;;
-  mhd-turb-l8-full|mhd-turb-l8-llf|mhd-turb-l9-m10)
+  mhd-turb-l7-m10|mhd-turb-l8-full|mhd-turb-l8-llf|mhd-turb-l9-m10)
     # Full-box MHD turbulence (256^3 or 512^3) from namelists/mhd_turb_full_l*.nml
     # Beta=0.1 ICs via MHD_TURB_BZ; gpu_turb + FFTW required.
     case "${cmd}" in
+      mhd-turb-l7-m10)  mt_level=7; mt_nml_name=mhd_turb_full_l7_m10.nml; mt_label=l7_m10_hlld ;;
       mhd-turb-l8-full) mt_level=8; mt_nml_name=mhd_turb_full_l8.nml; mt_label=l8_hlld ;;
       mhd-turb-l8-llf)  mt_level=8; mt_nml_name=mhd_turb_full_l8_llf.nml; mt_label=l8_llf ;;
       mhd-turb-l9-m10)  mt_level=9; mt_nml_name=mhd_turb_full_l9_m10.nml; mt_label=l9_m10_hlld ;;
@@ -513,7 +514,6 @@ case "${cmd}" in
     export DMO_TEND="${DMO_TEND:-0.5}"
     export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
     default_time="06:00:00"
-    if [[ "${cmd}" == "mhd-turb-l9-m10" ]]; then default_time="12:00:00"; fi
     echo "== ${cmd}: level=${mt_level} ($((2**mt_level))^3) label=${mt_label} NPRE=${GPU_NPRE} NML=${mt_nml}"
     echo "           IC_DIR=${IC_DIR} BUILD_BINARIES=${BUILD_BINARIES:-1} wall=${DMO_SLURM_TIME:-${default_time}}"
     GPU_DEBUG="${GPU_DEBUG:-0}" \
@@ -863,6 +863,7 @@ Hackathon profile launcher (run from ${HARNESS})
   ./submit_profiles.sh debug-cosmo-cpu-unigrid  unigrid CPU smoke (50 steps default)
   ./submit_profiles.sh cosmo-zoom    cosmo_zoom.nml zoom DM+gas (NPRE=8, FASTMATH=1, ngridmax=24M)
   ./submit_profiles.sh brio-wu       brio_wu.nml 3D Brio-Wu MHD shock tube (MHD=1, HLLD, 128^3 unigrid; auto ICs)
+  ./submit_profiles.sh mhd-turb-l7-m10    mhd_turb_full_l7_m10.nml (128^3 M~10 HLLD smoke)
   ./submit_profiles.sh mhd-turb-l8-full   mhd_turb_full_l8.nml (256^3 beta=0.1 HLLD)
   ./submit_profiles.sh mhd-turb-l8-llf    mhd_turb_full_l8_llf.nml (256^3 LLF)
   ./submit_profiles.sh mhd-turb-l9-m10    mhd_turb_full_l9_m10.nml (512^3 M~10 HLLD)

@@ -1,6 +1,6 @@
-! 512^3 unigrid (level 9), Mach~10 (turb_rms=26.457513, turb_T=0.1, beta=0.1).
-! HLLD Riemann (Marlowe production); theory: M = turb_rms*turb_T/c_s, c_s=0.264575.
-! ICs: hackathon_ensure_mhd_turb_ics 9 with MHD_TURB_BZ=0.7792435587233456
+! 128^3 unigrid (level 7), Mach~10 (turb_rms=26.457513, turb_T=0.1, beta=0.1).
+! Marlowe interactive smoke before 512^3 batch; HLLD; theory M = turb_rms*turb_T/c_s.
+! ICs: hackathon_ensure_mhd_turb_ics 7 with MHD_TURB_BZ=0.7792435587233456
 
 &RUN_PARAMS
  cosmo=.false.
@@ -19,7 +19,7 @@
 
 &OUTPUT_PARAMS
  delta_tout=0.25
- tend=0.5
+ tend=0.05
 /
 
 &INIT_PARAMS
@@ -28,10 +28,10 @@
 /
 
 &AMR_PARAMS
- levelmin=9
- levelmax=9
- ngridmax=4000000
- ncachemax=36000000
+ levelmin=7
+ levelmax=7
+ ngridmax=800000
+ ncachemax=3000000
  nexpand=1,
  boxlen=4.0
 /
