@@ -143,7 +143,7 @@ export MINIRAM=~/ramses-development/mini-ramses-dev GPU_NPRE=4
 DMO_SLURM_TIME=06:00:00 ./submit_profiles.sh mhd-turb-l9-m10
 ```
 
-Namelist: `namelists/mhd_turb_full_l9_m10.nml` (`levelmax=9`, `tend=0.5`, HLLD, tuned `ngridmax`/`ncachemax` for one H100).
+Namelist: `namelists/mhd_turb_full_l9_m10.nml` (`levelmax=9`, `tend=0.5`, HLLD). 512³ unigrid on one Marlowe H100 (80G): `ngridmax=17000000`, `ncachemax=2000000` (grid table headroom for 2⁹³ leaf blocks; cache sized to host allocation — not Stellar L8’s 36M cache).
 
 ## MHD turbulence run dirs (canonical namelists in `namelists/`)
 
