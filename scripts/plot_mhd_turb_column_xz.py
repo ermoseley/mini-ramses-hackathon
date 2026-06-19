@@ -5,6 +5,28 @@ Reads a mini-ramses MHD snapshot via ``miniramses.rd_cell``, integrates gas dens
 along the line-of-sight axis (default **y**), and overlays short in-plane magnetic
 field segments (Bx, Bz) weighted by rho along the column.
 
+Mach numbers (from leaf-cell volume averages, code units)
+---------------------------------------------------------
+RAMSES stores primitive pressure ``p`` and cell-centered ``B`` with ``emag = B^2/2``
+(see ``hydro/output_hydro.f90``), so Alfvén speed uses ``v_A = |B|/sqrt(rho)`` with
+no extra ``4*pi`` factor.
+
+Cell volume ``dV = dx^3``, mass element ``dm = rho * dV``.
+
+Density-weighted mean of scalar ``f``:
+    <f>_rho = sum(rho * f * dV) / sum(rho * dV)
+
+Sonic Mach:
+    v_rms = sqrt( < |v - <v>_rho|^2 >_rho )
+    c_s = sqrt(gamma * <p>_rho / <rho>_vol),  <rho>_vol = sum(rho * dV) / sum(dV)
+    M = v_rms / c_s
+
+Alfvén Mach (mean B, not rms |B| or |B - <B>|):
+    <B>_rho = sum(rho * B * dV) / sum(rho * dV)   (vector)
+    B_mean = |<B>_rho|
+    v_A,mean = B_mean / sqrt(<rho>_vol)
+    M_A = v_rms / v_A,mean
+
 Examples
 --------
   python3 plot_mhd_turb_column_xz.py \\
@@ -29,9 +51,72 @@ OUTPUT_RE = re.compile(r"^output_(\d+)$")
 
 # MHD primitive layout from hydro/output_hydro.f90 (0-based indices in rd_cell).
 IVAR_RHO = 0
+IVAR_VX = 1
+IVAR_VY = 2
+IVAR_VZ = 3
+IVAR_P = 4
 IVAR_BX = 5
 IVAR_BY = 6
 IVAR_BZ = 7
+
+
+def compute_mach_numbers(c, gamma: float) -> dict[str, float]:
+    """Volume / density-weighted sonic and mean-B Alfvén Mach from a Cell snapshot."""
+    rho = c.u[IVAR_RHO]
+    p = c.u[IVAR_P]
+    vx = c.u[IVAR_VX]
+    vy = c.u[IVAR_VY]
+    vz = c.u[IVAR_VZ]
+    bx = c.u[IVAR_BX]
+    by = c.u[IVAR_BY]
+    bz = c.u[IVAR_BZ]
+
+    dV = c.dx.astype(np.float64) ** 3
+    dm = rho * dV
+    mass = float(np.sum(dm))
+    vol = float(np.sum(dV))
+    if mass <= 0.0 or vol <= 0.0:
+        raise ValueError("zero mass or volume in snapshot")
+
+    rho_mean = mass / vol
+    p_mean = float(np.sum(dm * p) / mass)
+
+    v_mean = np.array(
+        [
+            float(np.sum(dm * vx) / mass),
+            float(np.sum(dm * vy) / mass),
+            float(np.sum(dm * vz) / mass),
+        ],
+        dtype=np.float64,
+    )
+    dv2 = (vx - v_mean[0]) ** 2 + (vy - v_mean[1]) ** 2 + (vz - v_mean[2]) ** 2
+    v_rms = float(np.sqrt(np.sum(dm * dv2) / mass))
+
+    b_mean = np.array(
+        [
+            float(np.sum(dm * bx) / mass),
+            float(np.sum(dm * by) / mass),
+            float(np.sum(dm * bz) / mass),
+        ],
+        dtype=np.float64,
+    )
+    b_mean_mag = float(np.linalg.norm(b_mean))
+
+    cs = float(np.sqrt(gamma * p_mean / rho_mean))
+    va_mean = b_mean_mag / np.sqrt(rho_mean)
+    mach = v_rms / cs if cs > 0.0 else np.nan
+    mach_a = v_rms / va_mean if va_mean > 0.0 else np.nan
+
+    return {
+        "M": mach,
+        "M_A": mach_a,
+        "v_rms": v_rms,
+        "c_s": cs,
+        "v_A_mean": va_mean,
+        "B_mean": b_mean_mag,
+        "rho_mean": rho_mean,
+        "p_mean": p_mean,
+    }
 
 
 def _import_miniramses():
@@ -156,14 +241,15 @@ def column_maps(
     nout: int,
     run_dir: Path,
     axis: str = "y",
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, int, float]:
-    """Return (Sigma, B_horiz1, B_horiz2, boxlen, time, lmax, aexp)."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, int, float, dict[str, float]]:
+    """Return (Sigma, B_horiz1, B_horiz2, boxlen, time, lmax, aexp, mach)."""
     ram = _import_miniramses()
     c = ram.rd_cell(nout, path=str(run_dir))
     if c.nvar <= IVAR_BZ:
         raise ValueError(f"Snapshot nvar={c.nvar}; expected MHD with B components")
 
     inf = ram.rd_info(nout, path=str(run_dir))
+    mach = compute_mach_numbers(c, float(inf.gamma))
     boxlen = float(inf.boxlen)
     time = float(inf.time)
     aexp = float(getattr(inf, "aexp", 1.0))
@@ -195,7 +281,7 @@ def column_maps(
         lmax,
         axis,
     )
-    return sigma, b1, b2, boxlen, time, lmax, aexp
+    return sigma, b1, b2, boxlen, time, lmax, aexp, mach
 
 
 def _draw_b_hatches(
@@ -206,6 +292,7 @@ def _draw_b_hatches(
     *,
     step: int,
     line_len_frac: float,
+    lw: float,
     color: str,
     alpha: float,
     min_b_frac: float,
@@ -247,7 +334,7 @@ def _draw_b_hatches(
             [z_c - half_len * uy_i, z_c + half_len * uy_i],
             color=color,
             alpha=alpha,
-            lw=0.6,
+            lw=lw,
             solid_capstyle="round",
         )
 
@@ -262,11 +349,14 @@ def plot_column(
     lmax: int,
     axis: str,
     out: Path,
+    mach: dict[str, float],
     *,
     cmap: str,
     vmin: float | None,
     vmax: float | None,
     quiver_step: int,
+    hatch_length: float,
+    hatch_lw: float,
     b_color: str,
     b_alpha: float,
     b_min_frac: float,
@@ -303,7 +393,8 @@ def plot_column(
             b2,
             boxlen,
             step=quiver_step,
-            line_len_frac=0.45,
+            line_len_frac=hatch_length,
+            lw=hatch_lw,
             color=b_color,
             alpha=b_alpha,
             min_b_frac=b_min_frac,
@@ -313,7 +404,8 @@ def plot_column(
     ax.set_ylabel(f"{ylab} [code length]")
     ax.set_title(
         rf"MHD column density ($\log_{{10}}\Sigma$, proj={axis})\n"
-        rf"output {nout:05d}, $t={time:.4g}$, lmax={lmax}"
+        rf"output {nout:05d}, $t={time:.4g}$, lmax={lmax}, "
+        rf"$M={mach['M']:.2f}$, $M_A={mach['M_A']:.2f}$"
     )
     cb = fig.colorbar(im, ax=ax, shrink=0.85)
     cb.set_label(r"$\log_{10}\,\Sigma$ (code units)")
@@ -386,8 +478,20 @@ def main() -> int:
     ap.add_argument(
         "--quiver-step",
         type=int,
-        default=8,
-        help="Subsample stride for B hatch lines on the map grid (default: 8)",
+        default=12,
+        help="Subsample stride for B hatch lines on the map grid (default: 12)",
+    )
+    ap.add_argument(
+        "--hatch-length",
+        type=float,
+        default=0.90,
+        help="Half-length of each B segment as fraction of map pixel size (default: 0.90)",
+    )
+    ap.add_argument(
+        "--hatch-lw",
+        type=float,
+        default=1.4,
+        help="Matplotlib linewidth for B hatch segments (default: 1.4)",
     )
     ap.add_argument("--b-color", default="white", help="B hatch line color")
     ap.add_argument("--b-alpha", type=float, default=0.75)
@@ -412,7 +516,7 @@ def main() -> int:
         print(f"[FAIL] missing snapshot dir: {snap}")
         return 1
 
-    sigma, b1, b2, boxlen, time, lmax, _aexp = column_maps(nout, run_dir, args.axis)
+    sigma, b1, b2, boxlen, time, lmax, _aexp, mach = column_maps(nout, run_dir, args.axis)
     out = args.out or (run_dir / f"mhd_turb_column_{args.axis}_{nout:05d}_t{time:.3f}.png")
 
     plot_column(
@@ -425,16 +529,23 @@ def main() -> int:
         lmax,
         args.axis,
         out,
+        mach,
         cmap=args.cmap,
         vmin=args.vmin,
         vmax=args.vmax,
         quiver_step=args.quiver_step,
+        hatch_length=args.hatch_length,
+        hatch_lw=args.hatch_lw,
         b_color=args.b_color,
         b_alpha=args.b_alpha,
         b_min_frac=args.b_min_frac,
         no_bfield=args.no_bfield,
     )
-    print(f"wrote {out} (t={time:.6f}, lmax={lmax}, map {sigma.shape[0]}x{sigma.shape[1]})")
+    print(
+        f"wrote {out} (t={time:.6f}, lmax={lmax}, map {sigma.shape[0]}x{sigma.shape[1]}, "
+        f"M={mach['M']:.4f}, M_A={mach['M_A']:.4f}, v_rms={mach['v_rms']:.4f}, "
+        f"c_s={mach['c_s']:.4f}, B_mean={mach['B_mean']:.4f})"
+    )
     return 0
 
 
