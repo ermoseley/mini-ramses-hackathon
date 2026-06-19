@@ -107,7 +107,7 @@ bin/marlowe_remote.sh 'hostname'
 
 ### 128³ interactive smoke (`preempt`)
 
-Same physics family as 512³: `beta=0.1`, `turb_T=0.1`, parabolic driving, **HLLD**, `turb_rms=26.457513` (M≈10; `utils/py/plot_mach_turb_rms_theory.py` in mini-ramses-dev).
+Same physics family as 512³: `beta=0.1`, `turb_T=0.1`, parabolic driving, **HLLD**, `turb_rms=36.370084` (M≈10). Mach scales empirically as **M ≈ C√turb_rms** with **C≈1.658** from Stellar L8 a200 (`turb_rms=200 → M≈23.45`); see `utils/py/plot_mach_turb_rms_theory.py` in mini-ramses-dev. For target Mach M: `turb_rms = (M/C)²`.
 
 Allocate one H100 on the preempt partition (build on the GPU node if needed):
 

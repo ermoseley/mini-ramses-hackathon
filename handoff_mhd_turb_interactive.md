@@ -120,6 +120,8 @@ Inside `~/use run bash -lc '...'`:
 | ICs | `$HARNESS_DIR/ics_mhd_turb/ic_mhd_turb_6_3d` (auto-generated) |
 | Outputs | `tend=0.5`, `delta_tout=0.25` |
 
+**Choosing `turb_rms` for target Mach:** empirical scaling from Stellar L8 a200 (beta=0.1): **M ≈ C√turb_rms**, **C≈1.658** (`turb_rms=200 → M≈23.45`). Invert: `turb_rms = (M/C)²` (e.g. M=10 → `turb_rms≈36.37`). The OU linear model `M = turb_rms·turb_T/c_s` over-predicts; use sqrt scaling for namelists. Plot: `mini-ramses-dev/utils/py/plot_mach_turb_rms_theory.py`.
+
 ---
 
 ## Batch fallback (only if user approves)
