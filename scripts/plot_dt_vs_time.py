@@ -8,7 +8,7 @@ Parses per-timestep lines written by ``update_time.f90`` (format 888):
 Examples
 --------
   python3 scripts/plot_dt_vs_time.py --log run.log --out dt_vs_time.png
-  python3 scripts/plot_dt_vs_time.py --run-dir /scratch/.../mhd_turb_full_l9_m10
+  python3 scripts/plot_dt_vs_time.py --run-dir /scratch/.../mhd_turb_full_l8
 """
 
 from __future__ import annotations

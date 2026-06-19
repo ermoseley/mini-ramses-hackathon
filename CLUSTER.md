@@ -105,9 +105,9 @@ bin/marlowe_login.sh
 bin/marlowe_remote.sh 'hostname'
 ```
 
-### 128³ interactive smoke (`preempt`)
+### 256³ interactive smoke (`preempt`)
 
-Same physics family as 512³: `beta=0.1`, `turb_T=0.1`, parabolic driving, **HLLD**, `turb_rms=36.370084` (M≈10). Mach scales empirically as **M ≈ C√turb_rms** with **C≈1.658** from Stellar L8 a200 (`turb_rms=200 → M≈23.45`); see `utils/py/plot_mach_turb_rms_theory.py` in mini-ramses-dev. For target Mach M: `turb_rms = (M/C)²`.
+Uses `mhd_turb_full_l8.nml`: `turb_T=0.1`, parabolic driving, **HLLD**, `turb_rms=200`. **Note:** after the `c_s=ρ=P=1` rescale (1 pc, `boxlen=1`, `eos_T2=34.25993294742506`), the old `beta=0.1` and Mach figures are stale — the empirical **M ≈ C√turb_rms** fit (**C≈1.658**, derived at the old `c_s≈0.19`) must be re-derived under the new sound speed. See `utils/py/plot_mach_turb_rms_theory.py` in mini-ramses-dev.
 
 Allocate one H100 on the preempt partition (build on the GPU node if needed):
 
@@ -119,9 +119,9 @@ source bin/hackathon-env.sh
 export MINIRAM=~/ramses-development/mini-ramses-dev MINIRAM_EXPECTED_BRANCH=gpu_turb GPU_NPRE=4
 hackathon_load_fftw
 export MHD_TURB_BZ=0.7792435587233456
-hackathon_ensure_mhd_turb_ics 7
+hackathon_ensure_mhd_turb_ics 8
 export IC_DIR GPU_HYDRO=1 GPU_MHD=1 GPU_TURB=1 GPU_GRAV=0 BUILD_BINARIES=1
-export NML="$(hackathon_nml mhd_turb_full_l7_m10.nml)"
+export NML="$(hackathon_nml mhd_turb_full_l8.nml)"
 export BIN_GPU="${MINIRAM}/bin/ramses3d.mhd.turb" DMO_TEND=0.05 DMO_FOUTPUT=1000000 PROFILE=run
 bash slurm/dmo_gpu.slurm
 ```
@@ -134,25 +134,12 @@ Alternative one-liner (login → GPU shell):
 srun --account=marlowe-m000115 --partition=preempt -G 1 --mem=80G --time=02:00:00 --pty bash -l
 ```
 
-### 512³ batch (after 128³ pass)
-
-```bash
-cd /scratch/m000115/emoseley/hackathon-repo
-source bin/hackathon-env.sh
-export MINIRAM=~/ramses-development/mini-ramses-dev GPU_NPRE=4
-DMO_SLURM_TIME=06:00:00 ./submit_profiles.sh mhd-turb-l9-m10
-```
-
-Namelist: `namelists/mhd_turb_full_l9_m10.nml` (`levelmax=9`, `tend=0.5`, HLLD). 512³ unigrid on one Marlowe H100 (80G): `ngridmax=17000000`, `ncachemax=2000000` (grid table headroom for 2⁹³ leaf blocks; cache sized to host allocation — not Stellar L8’s 36M cache).
-
 ## MHD turbulence run dirs (canonical namelists in `namelists/`)
 
 | Case | Namelist | Notes |
 | --- | --- | --- |
-| 256³ HLLD | `mhd_turb_full_l8.nml` | Stellar reference; `./submit_profiles.sh mhd-turb-l8-full` |
-| 256³ LLF | `mhd_turb_full_l8_llf.nml` | `./submit_profiles.sh mhd-turb-l8-llf` |
-| 128³ M≈10 HLLD smoke | `mhd_turb_full_l7_m10.nml` | Marlowe preempt interactive; `./submit_profiles.sh mhd-turb-l7-m10` |
-| 512³ M≈10 HLLD | `mhd_turb_full_l9_m10.nml` | Marlowe H100 batch 6 h; `DMO_SLURM_TIME=06:00:00 ./submit_profiles.sh mhd-turb-l9-m10` |
+| 256³ HLLD | `mhd_turb_full_l8.nml` | Stellar reference (`turb_T=0.1`, `turb_rms=200`); `./submit_profiles.sh mhd-turb-l8-full` |
+| 64³ base | `mhd_turb.nml` | `c_s=ρ=P=1` params (`turb_T=0.33`, `turb_rms=20`); `./submit_profiles.sh mhd-turb` |
 
 Job workdirs land under `${RUN_DIR}/dmo_gpu_<jobid>/<case>/` unless you use a custom Slurm script in scratch (legacy Stellar: `/scratch/gpfs/moseley/hackathon/mhd_turb_l8_a200_beta01/`).
 
