@@ -519,8 +519,8 @@ def main() -> int:
     ap.add_argument(
         "--hatch-lw",
         type=float,
-        default=0.7,
-        help="Matplotlib linewidth for B hatch segments (default: 0.7)",
+        default=0.35,
+        help="Matplotlib linewidth for B hatch segments (default: 0.35)",
     )
     ap.add_argument("--b-color", default="white", help="B hatch line color")
     ap.add_argument("--b-alpha", type=float, default=0.75)
