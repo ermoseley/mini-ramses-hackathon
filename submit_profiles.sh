@@ -513,6 +513,7 @@ case "${cmd}" in
     export IC_DIR
     export DMO_TEND="${DMO_TEND:-0.5}"
     export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
+    export DMO_NSTEPMAX="${DMO_NSTEPMAX:-100000}"
     default_time="06:00:00"
     echo "== ${cmd}: level=${mt_level} ($((2**mt_level))^3) label=${mt_label} NPRE=${GPU_NPRE} NML=${mt_nml}"
     echo "           IC_DIR=${IC_DIR} BUILD_BINARIES=${BUILD_BINARIES:-1} wall=${DMO_SLURM_TIME:-${default_time}}"
