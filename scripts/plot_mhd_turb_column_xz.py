@@ -513,8 +513,8 @@ def main() -> int:
     ap.add_argument(
         "--hatch-length",
         type=float,
-        default=0.90,
-        help="Half-length of each B segment as fraction of map pixel size (default: 0.90)",
+        default=1.3,
+        help="Half-length of each B segment as fraction of map pixel size (default: 1.3)",
     )
     ap.add_argument(
         "--hatch-lw",
