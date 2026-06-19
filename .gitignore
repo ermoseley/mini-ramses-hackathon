@@ -64,6 +64,8 @@ cic/
 
 # Plots and metrics dumps (derived from output data)
 *.png
+!artifacts/**
+!artifacts/**/*.png
 *.csv
 *.pdf
 details.txt
