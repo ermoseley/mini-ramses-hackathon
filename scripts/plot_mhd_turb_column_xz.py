@@ -318,7 +318,9 @@ def _draw_b_hatches(
     bmax = float(np.nanmax(bmag)) if np.any(np.isfinite(bmag)) else 0.0
     if bmax <= 0.0:
         return
-    mask = bmag > min_b_frac * bmax
+    mask = np.isfinite(bmag) & (bmag > 0.0)
+    if min_b_frac > 0.0:
+        mask &= bmag >= min_b_frac * bmax
     if not np.any(mask):
         return
 
@@ -327,8 +329,10 @@ def _draw_b_hatches(
     b1s = b1s[mask]
     b2s = b2s[mask]
     bmag = bmag[mask]
-    ux = b1s / bmag
-    uy = b2s / bmag
+    # Normalize direction even for weak |B|; avoid dropping segments as "zero".
+    bmag_safe = np.maximum(bmag, 1e-12 * bmax)
+    ux = b1s / bmag_safe
+    uy = b2s / bmag_safe
 
     dx_pix = boxlen / nx
     dz_pix = boxlen / ny
@@ -503,8 +507,8 @@ def main() -> int:
     ap.add_argument(
         "--quiver-step",
         type=int,
-        default=12,
-        help="Subsample stride for B hatch lines on the map grid (default: 12)",
+        default=6,
+        help="Subsample stride for B hatch lines on the map grid (default: 6; 2x linear density vs 12)",
     )
     ap.add_argument(
         "--hatch-length",
@@ -523,8 +527,8 @@ def main() -> int:
     ap.add_argument(
         "--b-min-frac",
         type=float,
-        default=0.05,
-        help="Skip B segments below this fraction of max |B| (default: 0.05)",
+        default=0.0,
+        help="Skip B segments below this fraction of max |B| (default: 0 = draw all non-zero)",
     )
     ap.add_argument("--no-bfield", action="store_true", help="Skip B overlay")
     ap.add_argument("--no-display", action="store_true", help="Save PNG only")
