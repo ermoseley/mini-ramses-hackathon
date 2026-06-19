@@ -18,16 +18,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
 import numpy as np
 
 _HERE = Path(__file__).resolve().parent
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
-
-import ramses_output_io as rio
+OUTPUT_RE = re.compile(r"^output_(\d+)$")
 
 # MHD primitive layout from hydro/output_hydro.f90 (0-based indices in rd_cell).
 IVAR_RHO = 0
@@ -324,8 +322,19 @@ def plot_column(
     plt.close(fig)
 
 
+def discover_output_nums(run_dir: Path) -> list[int]:
+    nums: list[int] = []
+    for entry in run_dir.iterdir():
+        if not entry.is_dir():
+            continue
+        match = OUTPUT_RE.match(entry.name)
+        if match:
+            nums.append(int(match.group(1)))
+    return sorted(nums)
+
+
 def pick_output_id(run_dir: Path, output_id: int | None) -> int:
-    nums = rio.discover_output_nums(run_dir)
+    nums = discover_output_nums(run_dir)
     if not nums:
         raise SystemExit(f"ERROR: no output_NNNNN/ under {run_dir}")
     if output_id is None:
