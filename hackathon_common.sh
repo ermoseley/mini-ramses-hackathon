@@ -239,7 +239,7 @@ hackathon_ensure_orszag_tang_ics() {
   local dust_flag=()
   if [[ "${ORSZAG_TANG_DUST:-0}" == "1" ]]; then
     dust_flag=(--dust)
-    echo "== orszag-tang dust ICs: will write zero ic_velcx/cy/cz (set ORSZAG_TANG_DUST=0 to skip)"
+    echo "== orszag-tang dust ICs: will write flow-coupled ic_velcx/cy/cz (set ORSZAG_TANG_DUST=0 to skip)"
   fi
   mkdir -p "${ic_dir}"
   # orszag_tang.py imports the sibling grafic.py, so run from its own directory;

@@ -1,11 +1,11 @@
-! Orszag-Tang vortex + GPU dust (256^3, level 8, 1 dust grain per cell at rest)
+! Orszag-Tang vortex + GPU dust (256^3, level 8, 1 dust grain per cell)
 ! MHD test for mini-ramses-dev gpu_dust branch. Same hydro/MHD setup as
 ! orszag_tang.nml with dust=.true. and ndust_per_cell=1.
 !
 ! ICs: mini-ramses-dev/utils/py/grafic/orszag_tang.py with --dust flag:
 !   python3 orszag_tang.py 8 --ndim 3 --size 1.0 --dust --outdir <ic_dir>
-! Dust positions are placed at cell centres by input_part_grafic.f90; only
-! zero-velocity files (ic_velcx/cy/cz) are required from the generator.
+! Dust positions are placed at cell centres by input_part_grafic.f90; dust
+! velocities (ic_velcx/cy/cz) match the OT gas flow (same as ic_u/ic_v/ic_w).
 !
 ! Build (Marlowe H100, serial make only):
 !   make -f Makefile.h100 COMPILER=NVHPC CUDA_ARCH=sm_90 \
