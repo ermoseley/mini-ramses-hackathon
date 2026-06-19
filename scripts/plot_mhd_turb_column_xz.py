@@ -368,8 +368,19 @@ def plot_column(
     import matplotlib.pyplot as plt
 
     log_sigma = np.log10(np.where(sigma > 0.0, sigma, np.nan))
-    lo = vmin if vmin is not None else float(np.nanpercentile(log_sigma, 1.0))
-    hi = vmax if vmax is not None else float(np.nanpercentile(log_sigma, 99.5))
+    pos = log_sigma[np.isfinite(log_sigma)]
+    if vmin is not None:
+        lo = vmin
+    elif pos.size > 0:
+        lo = float(np.min(pos))
+    else:
+        lo = 0.0
+    if vmax is not None:
+        hi = vmax
+    elif pos.size > 0:
+        hi = float(np.max(pos))
+    else:
+        hi = 1.0
 
     xlab, ylab = _axis_labels(axis)
     extent = (0.0, boxlen, 0.0, boxlen)
@@ -473,8 +484,18 @@ def main() -> int:
         help="Output PNG (default: <run-dir>/mhd_turb_column_<axis>_<nout>.png)",
     )
     ap.add_argument("--cmap", default="magma")
-    ap.add_argument("--vmin", type=float, default=None, help="log10 floor")
-    ap.add_argument("--vmax", type=float, default=None, help="log10 ceiling")
+    ap.add_argument(
+        "--vmin",
+        type=float,
+        default=None,
+        help="log10 floor (default: min of positive column density)",
+    )
+    ap.add_argument(
+        "--vmax",
+        type=float,
+        default=None,
+        help="log10 ceiling (default: max of positive column density)",
+    )
     ap.add_argument(
         "--quiver-step",
         type=int,
@@ -519,6 +540,21 @@ def main() -> int:
     sigma, b1, b2, boxlen, time, lmax, _aexp, mach = column_maps(nout, run_dir, args.axis)
     out = args.out or (run_dir / f"mhd_turb_column_{args.axis}_{nout:05d}_t{time:.3f}.png")
 
+    log_sigma = np.log10(np.where(sigma > 0.0, sigma, np.nan))
+    pos = log_sigma[np.isfinite(log_sigma)]
+    if args.vmin is not None:
+        used_vmin = args.vmin
+    elif pos.size > 0:
+        used_vmin = float(np.min(pos))
+    else:
+        used_vmin = 0.0
+    if args.vmax is not None:
+        used_vmax = args.vmax
+    elif pos.size > 0:
+        used_vmax = float(np.max(pos))
+    else:
+        used_vmax = 1.0
+
     plot_column(
         sigma,
         b1,
@@ -543,6 +579,9 @@ def main() -> int:
     )
     print(
         f"wrote {out} (t={time:.6f}, lmax={lmax}, map {sigma.shape[0]}x{sigma.shape[1]}, "
+        f"boxlen={boxlen:.6g}, extent=[0,{boxlen}]x[0,{boxlen}], "
+        f"log10 Sigma vmin={used_vmin:.6g} vmax={used_vmax:.6g}, "
+        f"hatch step={args.quiver_step} len={args.hatch_length} lw={args.hatch_lw}, "
         f"M={mach['M']:.4f}, M_A={mach['M_A']:.4f}, v_rms={mach['v_rms']:.4f}, "
         f"c_s={mach['c_s']:.4f}, B_mean={mach['B_mean']:.4f})"
     )
