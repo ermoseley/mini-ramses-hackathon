@@ -57,6 +57,36 @@ Initial conditions and simulation output are **generated on scratch** at job tim
 
 After `git clone`, run a case to create ICs/output on scratch. Do not rsync or copy output trees into the repo checkout.
 
+
+## Marlowe SSH (ControlMaster)
+
+Add to `~/.ssh/config` (mirror Stellar):
+
+```
+Host marlowe login.marlowe.stanford.edu
+  HostName login.marlowe.stanford.edu
+  User emoseley
+  ControlMaster auto
+  ControlPath ~/.ssh/sockets/cm-%r@%h:%p
+  ControlPersist 8h
+  ServerAliveInterval 60
+  ServerAliveCountMax 3
+```
+
+Then: `bin/marlowe_login.sh` once, then `bin/marlowe_remote.sh '…'`.
+
+Scratch harness: `/scratch/m000115/emoseley/hackathon-repo` (clone of this repo, branch `new_branch`) or `/scratch/m000115/hackathon`.
+
+## MHD turbulence run dirs (canonical namelists in `namelists/`)
+
+| Case | Namelist | Notes |
+| --- | --- | --- |
+| 256³ HLLD | `mhd_turb_full_l8.nml` | Stellar reference; `./submit_profiles.sh mhd-turb-l8-full` |
+| 256³ LLF | `mhd_turb_full_l8_llf.nml` | `./submit_profiles.sh mhd-turb-l8-llf` |
+| 512³ M≈10 HLLD | `mhd_turb_full_l9_m10.nml` | Marlowe H100; `./submit_profiles.sh mhd-turb-l9-m10` |
+
+Job workdirs land under `${RUN_DIR}/dmo_gpu_<jobid>/<case>/` unless you use a custom Slurm script in scratch (legacy Stellar: `/scratch/gpfs/moseley/hackathon/mhd_turb_l8_a200_beta01/`).
+
 ## Cross-cluster drift
 
 | Setting | Stellar | Marlowe |
