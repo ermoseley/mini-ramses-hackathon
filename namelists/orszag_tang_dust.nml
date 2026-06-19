@@ -7,7 +7,8 @@
 ! Dust positions are placed at cell centres by input_part_grafic.f90; dust
 ! velocities (ic_velcx/cy/cz) match the OT gas flow (same as ic_u/ic_v/ic_w).
 !
-! Build (Marlowe H100, serial make only):
+! pic=.true. required: adaptive_loop gates m_input_part/r_init_part on pic
+! (dust IC read lives in m_input_part_grafic). npartmax defaults to 0 so no DM.
 !   make -f Makefile.h100 COMPILER=NVHPC CUDA_ARCH=sm_90 \
 !        HYDRO=1 MHD=1 GRAV=0 NPRE=8 NDIM=3 ramses
 !
@@ -18,7 +19,7 @@
  cosmo=.false.
  hydro=.true.
  poisson=.false.
- pic=.false.
+ pic=.true.
  nrestart=0
  nstepmax=10000
  nsubcycle=10*1,
