@@ -27,9 +27,17 @@ Alfvén Mach (mean B, not rms |B| or |B - <B>|):
     v_A,mean = B_mean / sqrt(<rho>_vol)
     M_A = v_rms / v_A,mean
 
+Harness paths (Stellar)
+-----------------------
+- Git harness: ``HARNESS_DIR=/scratch/gpfs/moseley/hackathon-repo`` (branch ``new_branch``)
+- Run outputs: ``/scratch/gpfs/moseley/hackathon/<workdir>/`` (not the git checkout)
+- Always ``git pull`` in ``$HARNESS_DIR``, not ``~/hackathon`` (legacy sync may lag)
+
 Examples
 --------
-  python3 plot_mhd_turb_column_xz.py \\
+  export HARNESS_DIR=/scratch/gpfs/moseley/hackathon-repo
+  export MINIRAM=~/mini-ramses-dev
+  python3 $HARNESS_DIR/scripts/plot_mhd_turb_column_xz.py \\
       --run-dir /scratch/gpfs/moseley/hackathon/mhd_turb_l8_a200_beta01 \\
       --output-id 3 --no-display
 
