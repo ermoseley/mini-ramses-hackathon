@@ -112,7 +112,7 @@ def main() -> int:
         dts,
         args.out,
         title=args.title,
-        log_y=False if args.linear_y else None,
+        log_y=not args.linear_y,
     )
 
     t_min, t_max = min(times), max(times)
