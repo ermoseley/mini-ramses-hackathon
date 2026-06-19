@@ -421,11 +421,7 @@ def plot_column(
 
     ax.set_xlabel(f"{xlab} [code length]")
     ax.set_ylabel(f"{ylab} [code length]")
-    ax.set_title(
-        rf"MHD column density ($\log_{{10}}\Sigma$, proj={axis})\n"
-        rf"output {nout:05d}, $t={time:.4g}$, lmax={lmax}, "
-        rf"$M={mach['M']:.2f}$, $M_A={mach['M_A']:.2f}$"
-    )
+    ax.set_title(rf"$M={mach['M']:.2f}$, $M_A={mach['M_A']:.2f}$")
     cb = fig.colorbar(im, ax=ax, shrink=0.85)
     cb.set_label(r"$\log_{10}\,\Sigma$ (code units)")
     out.parent.mkdir(parents=True, exist_ok=True)
