@@ -1,3 +1,6 @@
+! UNITS RESCALED to code units c_s=rho=P=1: 1 pc box (units_length=3.08568d18,
+! units_time=5.7815d13, units_density=7.0d-23, eos_T2=34.25993294742506), boxlen=1.
+! Mach/beta figures below predate this rescaling (old c_s~0.19) and need re-deriving.
 ! 512^3 unigrid (level 9), Mach~10 (turb_rms=36.370084, turb_T=0.1, beta=0.1).
 ! HLLD Riemann (Marlowe production).
 ! AMR memory (512^3 unigrid, one H100 80G): ngridmax=17e6 grid slots;
@@ -36,7 +39,7 @@
  ngridmax=17000000
  ncachemax=2000000
  nexpand=1,
- boxlen=4.0
+ boxlen=1
 /
 
 &TURB_PARAMS
@@ -65,13 +68,14 @@
 &COOLING_PARAMS
  isothermal=.true.
  eos_type=1
- eos_T2=4.2194
+ eos_T2=34.25993294742506
+ T2max=34.25993294742506
 /
 
 &UNITS_PARAMS
- units_density=1.50492957435d-20
- units_time=3.1556926d13
- units_length=3.0857d18
+ units_density=7.0d-23
+ units_time=5.7815d13
+ units_length=3.08568d18
 /
 
 &BOUNDARY_PARAMS

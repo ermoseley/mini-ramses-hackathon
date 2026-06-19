@@ -51,18 +51,19 @@
  ngridmax=400000
  ncachemax=200000
  nexpand=1,
- boxlen=4.0
+ boxlen=1
 /
 
 &TURB_PARAMS
  turb=.true.
- turb_seed=1
+ turb_type=1
+ turb_seed=42
  comp_frac=0.5
- forcing_power_spectrum='power_law'
- turb_T=0.29241000937376255
- turb_Ndt=100
- turb_rms=5.094074502271999
- turb_min_rho=2.5470372511355715d-6
+ forcing_power_spectrum='parabolic'
+ turb_T=0.33
+ turb_Ndt=10
+ turb_rms=20
+ turb_min_rho=1d-5
 /
 
 &HYDRO_PARAMS
@@ -80,13 +81,14 @@
 &COOLING_PARAMS
  isothermal=.true.
  eos_type=1
- eos_T2=4.2194
+ eos_T2=34.25993294742506
+ T2max=34.25993294742506
 /
 
 &UNITS_PARAMS
- units_density=1.50492957435d-20
- units_time=3.1556926d13
- units_length=3.0857d18
+ units_density=7.0d-23
+ units_time=5.7815d13
+ units_length=3.08568d18
 /
 
 &BOUNDARY_PARAMS
