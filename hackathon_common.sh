@@ -129,6 +129,49 @@ hackathon_fix_pscal_ic_name() {
   fi
 }
 
+hackathon_file_size_bytes() {
+  local f="$1"
+  stat -c%s "${f}" 2>/dev/null || stat -f%z "${f}" 2>/dev/null || wc -c < "${f}"
+}
+
+# True when ic_velcx/cy/cz exist and match ic_u/v/w size (input_dust_grafic.f90).
+hackathon_grafic_dust_vel_ics_complete() {
+  local ic_dir="$1" u_size v_size w_size
+  [[ -f "${ic_dir}/ic_u" && -f "${ic_dir}/ic_v" && -f "${ic_dir}/ic_w" &&
+     -f "${ic_dir}/ic_velcx" && -f "${ic_dir}/ic_velcy" && -f "${ic_dir}/ic_velcz" ]] || return 1
+  u_size="$(hackathon_file_size_bytes "${ic_dir}/ic_u")"
+  v_size="$(hackathon_file_size_bytes "${ic_dir}/ic_v")"
+  w_size="$(hackathon_file_size_bytes "${ic_dir}/ic_w")"
+  [[ "${u_size}" -gt 0 && "${v_size}" -gt 0 && "${w_size}" -gt 0 &&
+     "${u_size}" -eq "$(hackathon_file_size_bytes "${ic_dir}/ic_velcx")" &&
+     "${v_size}" -eq "$(hackathon_file_size_bytes "${ic_dir}/ic_velcy")" &&
+     "${w_size}" -eq "$(hackathon_file_size_bytes "${ic_dir}/ic_velcz")" ]]
+}
+
+# Dust grains read ic_velcx/cy/cz in input_dust_grafic.f90. Uniform turb ICs from
+# uniform.py omit them; copy hydro velocities (ic_u/v/w) which match the gas flow.
+hackathon_ensure_grafic_dust_vel_ics() {
+  local ic_dir="$1"
+  if hackathon_grafic_dust_vel_ics_complete "${ic_dir}"; then
+    echo "== dust velocity ICs OK: ${ic_dir}/ic_velc{x,y,z}"
+    return 0
+  fi
+  if [[ ! -f "${ic_dir}/ic_u" || ! -f "${ic_dir}/ic_v" || ! -f "${ic_dir}/ic_w" ]]; then
+    echo "ERROR: cannot install dust velocity ICs; missing ic_u/ic_v/ic_w under ${ic_dir}" >&2
+    return 1
+  fi
+  echo "== installing dust velocity ICs: ic_u/v/w -> ic_velcx/cy/cz in ${ic_dir}"
+  cp -f "${ic_dir}/ic_u" "${ic_dir}/ic_velcx"
+  cp -f "${ic_dir}/ic_v" "${ic_dir}/ic_velcy"
+  cp -f "${ic_dir}/ic_w" "${ic_dir}/ic_velcz"
+  if ! hackathon_grafic_dust_vel_ics_complete "${ic_dir}"; then
+    echo "ERROR: dust velocity IC install failed under ${ic_dir}" >&2
+    ls -la "${ic_dir}"/ic_velc* "${ic_dir}"/ic_u "${ic_dir}"/ic_v "${ic_dir}"/ic_w >&2 || true
+    return 1
+  fi
+  echo "== dust velocity ICs installed ($(hackathon_file_size_bytes "${ic_dir}/ic_velcx") bytes each plane file)"
+}
+
 # Brio-Wu MHD shock-tube grafic ICs. Unlike the zoom ICs (downloaded), these are
 # generated on the fly by mini-ramses-dev/utils/py/grafic/brio_wu.py if absent.
 # Arg 1: refinement level (grid is 2^level along each axis; default 7 -> 128^3).
@@ -185,6 +228,9 @@ hackathon_ensure_mhd_turb_ics() {
   if hackathon_grafic_mhd_ics_complete "${ic_dir}"; then
     echo "== mhd-turb ICs present: ${ic_dir} (${n}^3, Bz=${bz})"
     export IC_DIR="${ic_dir}"
+    if [[ "${MHD_TURB_DUST:-0}" == "1" ]]; then
+      hackathon_ensure_grafic_dust_vel_ics "${ic_dir}" || return 1
+    fi
     return 0
   fi
   echo "== mhd-turb ICs missing under ${ic_dir}; generating with uniform.py (level ${level} -> ${n}^3, 3D, Bz=${bz}, rho=${rho}, p=${p0}, size=${size})"
@@ -206,6 +252,61 @@ hackathon_ensure_mhd_turb_ics() {
   fi
   echo "== mhd-turb ICs installed under ${ic_dir}"
   export IC_DIR="${ic_dir}"
+  if [[ "${MHD_TURB_DUST:-0}" == "1" ]]; then
+    hackathon_ensure_grafic_dust_vel_ics "${ic_dir}" || return 1
+  fi
+}
+
+# Decaying MHD turbulence grafic ICs: band-limited turbulent velocity from turb.py
+# (non-zero ic_u/v/w), uniform rho/p, uniform Bz. Use with turb=.false. in the
+# namelist (no stochastic driving). Arg 1: refinement level (2^level cells/axis).
+hackathon_ensure_mhd_turb_decay_ics() {
+  hackathon_setup_paths
+  local level="${1:-8}"
+  local n=$((2 ** level))
+  local ic_root="${MHD_TURB_IC_ROOT:-${HARNESS_DIR}/ics_mhd_turb}"
+  local ic_dir="${ic_root}/ic_mhd_turb_decay_${level}_3d"
+  local gen="${MINIRAM}/utils/py/grafic/turb.py"
+  local size="${MHD_TURB_SIZE:-4.0}"
+  local rho="${MHD_TURB_RHO:-0.28954719470909174}"
+  local p0="${MHD_TURB_P0:-0.030361026190591216}"
+  local bz="${MHD_TURB_BZ:-4}"
+  local vrms="${MHD_TURB_VRMS:-2.0}"
+  local kmin="${MHD_TURB_KMIN:-2}"
+  local kmax="${MHD_TURB_KMAX:-$((n / 2))}"
+  local alpha="${MHD_TURB_ALPHA:-0.5}"
+  local spectrum="${MHD_TURB_SPECTRUM:-parabolic}"
+  local seed="${MHD_TURB_SEED:-42}"
+  if hackathon_grafic_mhd_ics_complete "${ic_dir}"; then
+    echo "== mhd-turb-decay ICs present: ${ic_dir} (${n}^3, Bz=${bz}, vrms=${vrms})"
+    export IC_DIR="${ic_dir}"
+    if [[ "${MHD_TURB_DUST:-0}" == "1" ]]; then
+      hackathon_ensure_grafic_dust_vel_ics "${ic_dir}" || return 1
+    fi
+    return 0
+  fi
+  echo "== mhd-turb-decay ICs missing under ${ic_dir}; generating with turb.py (level ${level} -> ${n}^3, Bz=${bz}, vrms=${vrms}, k=[${kmin},${kmax}], alpha=${alpha}, spectrum=${spectrum})"
+  if [[ ! -f "${gen}" ]]; then
+    echo "ERROR: turb.py not found at ${gen}" >&2
+    echo "       (sync mini-ramses-dev to ${MINIRAM}; it lives in utils/py/grafic/)" >&2
+    return 1
+  fi
+  local py="${PYTHON:-python3}"
+  mkdir -p "${ic_dir}"
+  ( cd "$(dirname "${gen}")" && "${py}" "$(basename "${gen}")" "${level}" --ndim 3 \
+      --size "${size}" --rho "${rho}" --p0 "${p0}" --bz "${bz}" \
+      --kmin "${kmin}" --kmax "${kmax}" --alpha "${alpha}" --vrms "${vrms}" \
+      --spectrum "${spectrum}" --seed "${seed}" --outdir "${ic_dir}" )
+  if ! hackathon_grafic_mhd_ics_complete "${ic_dir}"; then
+    echo "ERROR: mhd-turb-decay IC generation failed; expected the full grafic MHD set under ${ic_dir}" >&2
+    ls -la "${ic_dir}" >&2 || true
+    return 1
+  fi
+  echo "== mhd-turb-decay ICs installed under ${ic_dir}"
+  export IC_DIR="${ic_dir}"
+  if [[ "${MHD_TURB_DUST:-0}" == "1" ]]; then
+    hackathon_ensure_grafic_dust_vel_ics "${ic_dir}" || return 1
+  fi
 }
 
 # Orszag-Tang vortex MHD grafic ICs. Like the brio-wu ICs, these are generated on
@@ -1549,7 +1650,7 @@ hackathon_build_binary() {
   fi
   export BIN_GPU="${bin_gpu}"
   echo "== building GPU binary from ${MINIRAM}/bin (Makefile=${makefile}, CUDA_ARCH=${gpu_cuda_arch} PAPER=${gpu_paper} MHD=${gpu_mhd} NPSCAL=${gpu_npscal} KICK_COOP_GATHER=${gpu_kick_coop_gather} KICK_COOP_VALIDATE=${gpu_kick_coop_validate} CUB_SORT_REFINE=${cub_sort_refine} CUB_SCAN_REFINE=${cub_scan_refine} FASTMATH=${gpu_fastmath})"
-  echo "== GPU build: COMPILER=NVHPC DEBUG=${gpu_debug} NHILBERT=1 GRAV=${gpu_grav} HYDRO=${gpu_hydro} MHD=${gpu_mhd} TURB=${gpu_turb} NPSCAL=${gpu_npscal} NPRE=${gpu_npre} FASTMATH=${gpu_fastmath} NDIM=3${gpu_units:+ UNITS=${gpu_units}}${gpu_fftw:+ FFTW=${gpu_fftw}}${gpu_fftw_vendor:+ FFTW_VENDOR_INC=${gpu_fftw_vendor}}${gpu_fftw_header:+ FFTW_HEADER_DIR=${gpu_fftw_header}}"
+  echo "== GPU build: COMPILER=NVHPC DEBUG=${gpu_debug} NHILBERT=1 GRAV=${gpu_grav} HYDRO=${gpu_hydro} MHD=${gpu_mhd} TURB=${gpu_turb} NPSCAL=${gpu_npscal} NPRE=${gpu_npre} FASTMATH=${gpu_fastmath} ALWAYS_KIND8_POS=${GPU_ALWAYS_KIND8_POS:-0} NDIM=3${gpu_units:+ UNITS=${gpu_units}}${gpu_fftw:+ FFTW=${gpu_fftw}}${gpu_fftw_vendor:+ FFTW_VENDOR_INC=${gpu_fftw_vendor}}${gpu_fftw_header:+ FFTW_HEADER_DIR=${gpu_fftw_header}}"
   echo "== install target: ${BIN_GPU}"
   local gpu_clean="${CLEAN:-1}"
   if [[ "${gpu_turb}" == "1" && -z "${gpu_fftw}" ]]; then
@@ -1600,6 +1701,9 @@ hackathon_build_binary() {
   fi
   if [[ -n "${gpu_units}" ]]; then
     make_args+=(UNITS="${gpu_units}")
+  fi
+  if [[ "${GPU_ALWAYS_KIND8_POS:-0}" == "1" ]]; then
+    make_args+=(ALWAYS_KIND8_POS=1)
   fi
   (
     set -euo pipefail
@@ -1668,6 +1772,21 @@ hackathon_apply_part_dep_algo() {
   local file="$1"
   [[ -z "${PART_DEP_ALGO:-}" ]] && return 0
   hackathon_apply_nml_kv part_dep_algo "${PART_DEP_ALGO}" "${file}"
+}
+
+# Set ndust_per_cell and recompute ndusttot/ndustmax from levelmin (2^(3*levelmin) cells).
+hackathon_apply_ndust_ppc() {
+  local file="$1" ppc="$2"
+  [[ -z "${ppc}" ]] && return 0
+  local levelmin n_cells ndusttot
+  levelmin="$(grep -E '^[[:space:]]*levelmin=' "${file}" | sed -E 's/.*=[[:space:]]*([0-9]+).*/\1/' | head -1)"
+  levelmin="${levelmin:-8}"
+  n_cells=$((2 ** (3 * levelmin)))
+  ndusttot=$((n_cells * ppc))
+  hackathon_apply_nml_kv ndust_per_cell "${ppc}" "${file}"
+  hackathon_apply_nml_kv ndusttot "${ndusttot}" "${file}"
+  hackathon_apply_nml_kv ndustmax "${ndusttot}" "${file}"
+  echo "== ndust ppc=${ppc} levelmin=${levelmin} cells=${n_cells} ndusttot=${ndusttot}"
 }
 
 # Comma-separated search paths for NCU --source-folders (capture + post-export).
@@ -2055,6 +2174,9 @@ hackathon_sbatch_export() {
   fi
   if [[ -n "${DMO_NSTEPMAX:-}" ]]; then
     flags="${flags},DMO_NSTEPMAX=${DMO_NSTEPMAX}"
+  fi
+  if [[ -n "${DMO_NDUST_PER_CELL:-}" ]]; then
+    flags="${flags},DMO_NDUST_PER_CELL=${DMO_NDUST_PER_CELL}"
   fi
   if [[ -n "${PROFILE:-}" ]]; then
     flags="${flags},PROFILE=${PROFILE}"

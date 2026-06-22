@@ -1,0 +1,92 @@
+! Decaying MHD turbulence (256^3, level 8) + GPU dust on mini-ramses-dev gpu_dust.
+! Turbulent velocity ICs from utils/py/grafic/turb.py (hackathon_ensure_mhd_turb_decay_ics);
+! no stochastic driving (turb=.false.). Uniform rho/p + Bz=4; dust grains placed at
+! cell centres (and subcell offsets when ndust_per_cell>1) by input_dust_grafic.f90.
+!
+! Interactive debug: MHD_TURB_DUST_NSTEPMAX=10 MHD_TURB_DUST_PPC=1
+! Production harness: ./submit_profiles.sh mhd-turb-dust-l8
+!
+! Build: HYDRO=1 MHD=1 ALWAYS_KIND8_POS=1 (gpu_dust branch; TURB=0, no FFTW).
+
+&RUN_PARAMS
+ cosmo=.false.
+ hydro=.true.
+ poisson=.false.
+ pic=.true.
+ nrestart=0
+ nstepmax=100000
+ nsubcycle=10*1,
+ ncontrol=1
+ nsuperoct=2
+ nremap=10
+ verbose=.false.
+ debug=.false.
+/
+
+&OUTPUT_PARAMS
+ delta_tout=0.25
+ tend=0.5
+/
+
+&INIT_PARAMS
+ filetype='grafic'
+ initfile(1)='ics_mhd_turb'
+/
+
+&AMR_PARAMS
+ levelmin=8
+ levelmax=8
+ ngridmax=2500000
+ ncachemax=12000000
+ nexpand=1,
+ boxlen=1
+/
+
+&TURB_PARAMS
+ turb=.false.
+/
+
+&HYDRO_PARAMS
+ gamma=1.4
+ courant_factor=0.8
+ slope_type=1
+ slope_mag_type=2
+ riemann='hlld'
+ riemann2d='hlld'
+ switch_llf_dmin=1e-5
+ smallc=1e-12
+ smallr=1e-10
+/
+
+&COOLING_PARAMS
+ isothermal=.true.
+ eos_type=1
+ eos_T2=34.25993294742506
+ T2max=34.25993294742506
+/
+
+&UNITS_PARAMS
+ units_density=7.0d-23
+ units_time=5.7815d13
+ units_length=3.08568d18
+/
+
+&BOUNDARY_PARAMS
+ periodic=.true.,.true.,.true.
+/
+
+&REFINE_PARAMS
+ interpol_var=0
+ interpol_type=0
+ err_grad_p=0.1
+/
+
+&DUST_PARAMS
+ dust=.true.
+ ndusttot=16777216
+ ndustmax=16777216
+ ndust_per_cell=1
+ grain_size_parameter=0.1
+ grain_charge_parameter=100.0
+ dust_force_interpolation_scheme=1
+/

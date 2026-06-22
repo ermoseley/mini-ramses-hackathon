@@ -47,6 +47,7 @@ CUB_SORT_REFINE = 1
 KICK_COOP_GATHER = 0
 CUB_SCAN_REFINE = 1
 FASTMATH = 0
+ALWAYS_KIND8_POS = 0
 DEBUG = 0
 HDF5 = 0
 MPIF90 = mpif90
@@ -123,6 +124,9 @@ ifneq ($(NPRE),8)
 endif
 ifneq ($(NHILBERT),1)
    DEFINES += -DNHILBERT=$(NHILBERT)
+endif
+ifeq ($(ALWAYS_KIND8_POS),1)
+   DEFINES += -DALWAYS_KIND8_POS
 endif
 #############################################################################
 # Set proper units and initial conditions
@@ -235,6 +239,23 @@ endif
    endif
 endif
 #############################################################################
+# TURB=1: link against FFTW= prefix; #include "fftw3.f" from FFTW_HEADER_DIR when staged.
+ifeq ($(TURB),1)
+ifndef FFTW
+$(error TURB=1 requires FFTW=install_prefix; harness sets FFTW via hackathon_load_fftw)
+endif
+ifdef FFTW_HEADER_DIR
+TURB_INC := -I$(FFTW_HEADER_DIR)
+else
+TURB_INC := -I$(FFTW)/include
+ifdef FFTW_VENDOR_INC
+TURB_INC += -I$(FFTW_VENDOR_INC)
+endif
+endif
+FFLAGS += $(TURB_INC)
+F90 += $(TURB_INC)
+endif
+#############################################################################
 C = ifort
 CFLAGS = -g -O3
 #############################################################################
@@ -247,9 +268,21 @@ ifeq ($(HDF5),1)
    LIBHDF5 = -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
 endif
 ifeq ($(TURB),1)
-   FFTW = /usr/local/fftw/gcc/3.3.9
-   LIBFFTW = -L$(FFTW)/lib -lfftw3
-   FFLAGS += -I$(FFTW)/include
+ifndef FFTW
+$(error TURB=1 requires FFTW=install_prefix; harness loads fftw/nvhpc-21.5/3.3.9 via hackathon_load_fftw)
+endif
+ifneq ($(wildcard $(FFTW)/lib/libfftw3.so)$(wildcard $(FFTW)/lib/libfftw3.a),)
+FFTW_LIBDIR = $(FFTW)/lib
+else ifneq ($(wildcard $(FFTW)/lib64/libfftw3.so)$(wildcard $(FFTW)/lib64/libfftw3.a),)
+FFTW_LIBDIR = $(FFTW)/lib64
+else ifneq ($(wildcard $(FFTW)/lib64/libfftw3.so*),)
+FFTW_LIBDIR = $(FFTW)/lib64
+else ifneq ($(wildcard $(FFTW)/lib/libfftw3.so*),)
+FFTW_LIBDIR = $(FFTW)/lib
+else
+FFTW_LIBDIR = $(FFTW)/lib64
+endif
+   LIBFFTW = -L$(FFTW_LIBDIR) -lfftw3
 endif
 LIBS += $(LIBMPI) $(LIBFFTW)
 #############################################################################
@@ -322,6 +355,12 @@ cub_module_radix_sort_c.o: cub_module_radix_sort.h cub_module_radix_sort.cu
 #############################################################################
 cub_module_radix_sort_f.o: cub_module_radix_sort.cuf cub_module_radix_sort_c.o
 	nvfortran $(FFLAGS) -c cub_module_radix_sort_c.o $(GPU_PATH)/cub_module_radix_sort.cuf -o cub_module_radix_sort_f.o
+ifeq ($(TURB),1)
+# turb_commons.f90 #include "fftw3.f" — TURB_INC on FFLAGS (FFTW_HEADER_DIR when staged).
+turb_commons.o: ../turb/turb_commons.f90
+	$(F90) $(FFLAGS) -c $< -o $@
+endif
+gpu_manager.o: gpu_runner.o turb_commons.o
 
 %.o:%.cuf
 	$(F90) $(FFLAGS) -c $< -o $@ $(LIBS)

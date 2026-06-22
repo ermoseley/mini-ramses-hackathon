@@ -22,6 +22,8 @@
 #   ./submit_profiles.sh ot-amr           # Orszag-Tang MHD AMR (orszag_tang_amr.nml), 32^3 base L5->L8, err_grad_p=0.15
 #   ./submit_profiles.sh ot-pscal         # ot-amr + one passive scalar (checkerboard ic_pvar_00001), NPSCAL=1
 #   ./submit_profiles.sh nsys-ot          # nsys profile of Orszag-Tang MHD vortex (128^3, NPRE=8, 5 timesteps)
+#   ./submit_profiles.sh nsys-dust        # nsys: 256^3 decaying MHD turb + dust, 1 grain/cell, 10 steps
+#   ./submit_profiles.sh nsys-dust-12     # nsys: same with 12 grains/cell
 #   ./submit_profiles.sh nsys-oth         # same as nsys-ot but MHD=0 (hydro-only speed comparison)
 #   ./submit_profiles.sh ncu-ot           # ncu profile of hydro_integrator_kernel (Orszag-Tang, 2 steps)
 #   ./submit_profiles.sh ncu-ot-localize  # ncu-ot + lineinfo + --import-source + source-page export (128^3 default)
@@ -524,6 +526,70 @@ case "${cmd}" in
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-${default_time}}" dmo_gpu.slurm
     ;;
+  mhd-turb-dust-l8)
+    # 256^3 decaying MHD turbulence + GPU dust (turb.py ICs, turb=.false., Bz=4).
+    # Requires gpu_dust branch, ALWAYS_KIND8_POS=1 (no TURB=1 / FFTW).
+    # Debug interactively first: scripts/run_mhd_turb_dust_interactive.sh
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_dust}"
+    export MHD_TURB_DUST=1
+    hackathon_ensure_mhd_turb_decay_ics 8
+    mt_nml="$(hackathon_nml mhd_turb_dust_l8.nml)"
+    export GPU_HYDRO=1 GPU_MHD=1 GPU_TURB=0 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+    export GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export GPU_NPRE="${GPU_NPRE:-8}"
+    export GPU_ALWAYS_KIND8_POS="${GPU_ALWAYS_KIND8_POS:-1}"
+    export IC_DIR
+    export DMO_TEND="${DMO_TEND:-0.5}"
+    export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
+    export DMO_NSTEPMAX="${DMO_NSTEPMAX:-100000}"
+    export DMO_NDUST_PER_CELL="${DMO_NDUST_PER_CELL:-1}"
+    default_time="06:00:00"
+    echo "== ${cmd}: 256^3 decaying MHD turb + dust ppc=${DMO_NDUST_PER_CELL} vrms=${MHD_TURB_VRMS:-2.0} charge=100 size=0.1"
+    echo "           NML=${mt_nml} IC_DIR=${IC_DIR} ALWAYS_KIND8_POS=${GPU_ALWAYS_KIND8_POS}"
+    echo "           BUILD_BINARIES=${BUILD_BINARIES:-1} wall=${DMO_SLURM_TIME:-${default_time}}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.dust}" \
+    NML="${mt_nml}" PROFILE=run \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}" \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-${default_time}}" --mem=80G dmo_gpu.slurm
+    ;;
+  nsys-dust|nsys-dust-12)
+    # Nsight Systems profile: 256^3 decaying MHD turbulence + GPU dust (mhd_turb_dust_l8.nml).
+    # Default 10 coarse steps; 1 vs 12 grains/cell via case name.
+    case "${cmd}" in
+      nsys-dust) dust_ppc=1 ;;
+      nsys-dust-12) dust_ppc=12 ;;
+    esac
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_dust}"
+    export MHD_TURB_DUST=1
+    hackathon_ensure_mhd_turb_decay_ics 8
+    mt_nml="$(hackathon_nml mhd_turb_dust_l8.nml)"
+    export GPU_HYDRO=1 GPU_MHD=1 GPU_TURB=0 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+    export GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export GPU_NPRE="${GPU_NPRE:-8}"
+    export GPU_ALWAYS_KIND8_POS="${GPU_ALWAYS_KIND8_POS:-1}"
+    export IC_DIR
+    export DMO_TEND="${DMO_TEND:-0.5}"
+    export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
+    export DMO_NSTEPMAX="${DMO_NSTEPMAX:-10}"
+    export DMO_NDUST_PER_CELL="${DMO_NDUST_PER_CELL:-${dust_ppc}}"
+    echo "== ${cmd}: 256^3 decaying MHD turb + dust PROFILE=nsys ppc=${DMO_NDUST_PER_CELL} nstepmax=${DMO_NSTEPMAX}"
+    echo "           NML=${mt_nml} IC_DIR=${IC_DIR} BIN=${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.dust}"
+    echo "           BUILD_BINARIES=${BUILD_BINARIES:-0} wall=${DMO_SLURM_TIME:-02:00:00}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.dust}" \
+    NML="${mt_nml}" PROFILE=nsys \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-0}" \
+    BUILD_BINARIES="${BUILD_BINARIES:-0}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-02:00:00}" --mem=80G dmo_gpu.slurm
+    ;;
   orszag-tang)
     # Orszag-Tang vortex on the GPU cube ("rock") MHD integrator, HLLD by default
     # (riemann='hlld', riemann2d='hlld'). Same scalar-free MHD build as brio-wu
@@ -862,6 +928,9 @@ Hackathon profile launcher (run from ${HARNESS})
   ./submit_profiles.sh cosmo-zoom    cosmo_zoom.nml zoom DM+gas (NPRE=8, FASTMATH=1, ngridmax=24M)
   ./submit_profiles.sh brio-wu       brio_wu.nml 3D Brio-Wu MHD shock tube (MHD=1, HLLD, 128^3 unigrid; auto ICs)
   ./submit_profiles.sh mhd-turb-l8-full   mhd_turb_full_l8.nml (256^3 HLLD)
+  ./submit_profiles.sh mhd-turb-dust-l8   mhd_turb_dust_l8.nml (256^3 decaying MHD turb + dust, turb.py ICs, ALWAYS_KIND8_POS=1)
+  ./submit_profiles.sh nsys-dust          nsys profile decaying MHD turb + dust L8, 1 grain/cell, 10 steps
+  ./submit_profiles.sh nsys-dust-12       nsys profile decaying MHD turb + dust L8, 12 grains/cell, 10 steps
   ./submit_profiles.sh mhd-turb      mhd_turb.nml 3D driven MHD turbulence (MHD=1 TURB=1, 64^3 unigrid, uniform IC Bz=4; gpu_turb)
   ./submit_profiles.sh orszag-tang      orszag_tang.nml 3D Orszag-Tang MHD vortex GPU (MHD=1, HLLD, 256^3 unigrid; auto ICs)
   ./submit_profiles.sh ot-amr           orszag_tang_amr.nml Orszag-Tang MHD AMR GPU (32^3 base L5->L8, err_grad_p=0.15; auto ICs)

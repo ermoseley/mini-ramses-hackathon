@@ -150,6 +150,7 @@ fi
 [[ -n "${DMO_NCACHEMAX:-}" ]] && apply_kv ncachemax "${DMO_NCACHEMAX}" "${run_nml}"
 [[ -n "${DMO_AEND:-}" ]] && apply_kv aend "${DMO_AEND}" "${run_nml}"
 [[ -n "${DMO_GPU_CIC_FAST_PATH:-}" ]] && apply_kv gpu_cic_fast_path "${DMO_GPU_CIC_FAST_PATH}" "${run_nml}"
+[[ -n "${DMO_NDUST_PER_CELL:-}" ]] && hackathon_apply_ndust_ppc "${run_nml}" "${DMO_NDUST_PER_CELL}"
 hackathon_apply_part_dep_algo "${run_nml}"
 
 echo "== namelist: ${run_nml}"
