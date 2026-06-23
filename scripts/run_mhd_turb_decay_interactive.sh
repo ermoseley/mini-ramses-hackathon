@@ -75,6 +75,14 @@ fi
 if [[ -n "${MHD_TURB_DECAY_NSTEPMAX:-}" ]]; then
   hackathon_apply_nml_kv nstepmax "${MHD_TURB_DECAY_NSTEPMAX}" "${workdir}/input.nml"
 fi
+# Larger grids need bigger oct pools: level 9 (512^3) holds ~19M octs, far above
+# the 64^3 namelist default. Override ngridmax/ncachemax via env when scaling up.
+if [[ -n "${MHD_TURB_NGRIDMAX:-}" ]]; then
+  hackathon_apply_nml_kv ngridmax "${MHD_TURB_NGRIDMAX}" "${workdir}/input.nml"
+fi
+if [[ -n "${MHD_TURB_NCACHEMAX:-}" ]]; then
+  hackathon_apply_nml_kv ncachemax "${MHD_TURB_NCACHEMAX}" "${workdir}/input.nml"
+fi
 
 echo "== staged namelist"
 grep -E 'levelmin|levelmax|nstepmax|turb=|pic=|riemann|tend|periodic' "${workdir}/input.nml" || true
