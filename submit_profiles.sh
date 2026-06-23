@@ -536,7 +536,7 @@ case "${cmd}" in
     mt_nml="$(hackathon_nml mhd_turb_dust_l8.nml)"
     export GPU_HYDRO=1 GPU_MHD=1 GPU_TURB=0 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
     export GPU_FASTMATH="${GPU_FASTMATH:-0}"
-    export GPU_NPRE="${GPU_NPRE:-8}"
+    export GPU_NPRE="${GPU_NPRE:-4}"
     export GPU_ALWAYS_KIND8_POS="${GPU_ALWAYS_KIND8_POS:-1}"
     export IC_DIR
     export DMO_TEND="${DMO_TEND:-0.5}"
@@ -544,7 +544,7 @@ case "${cmd}" in
     export DMO_NSTEPMAX="${DMO_NSTEPMAX:-100000}"
     export DMO_NDUST_PER_CELL="${DMO_NDUST_PER_CELL:-1}"
     default_time="06:00:00"
-    echo "== ${cmd}: 256^3 decaying MHD turb + dust ppc=${DMO_NDUST_PER_CELL} vrms=${MHD_TURB_VRMS:-2.0} charge=100 size=0.1"
+    echo "== ${cmd}: 256^3 decaying MHD turb + dust ppc=${DMO_NDUST_PER_CELL} vrms=${MHD_TURB_VRMS:-2.0} NPRE=${GPU_NPRE} charge=100 size=0.1"
     echo "           NML=${mt_nml} IC_DIR=${IC_DIR} ALWAYS_KIND8_POS=${GPU_ALWAYS_KIND8_POS}"
     echo "           BUILD_BINARIES=${BUILD_BINARIES:-1} wall=${DMO_SLURM_TIME:-${default_time}}"
     GPU_DEBUG="${GPU_DEBUG:-0}" \
@@ -570,7 +570,7 @@ case "${cmd}" in
     mt_nml="$(hackathon_nml mhd_turb_dust_l8.nml)"
     export GPU_HYDRO=1 GPU_MHD=1 GPU_TURB=0 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
     export GPU_FASTMATH="${GPU_FASTMATH:-0}"
-    export GPU_NPRE="${GPU_NPRE:-8}"
+    export GPU_NPRE="${GPU_NPRE:-4}"
     export GPU_ALWAYS_KIND8_POS="${GPU_ALWAYS_KIND8_POS:-1}"
     export IC_DIR
     export DMO_TEND="${DMO_TEND:-0.5}"

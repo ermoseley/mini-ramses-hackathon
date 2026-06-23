@@ -46,6 +46,8 @@ EXEC = ramses
 CUB_SORT_PART = 1
 CUB_SORT_REFINE = 1
 CUB_SCAN_REFINE = 1
+# Store particle positions in double precision regardless of NPRE (charged dust).
+ALWAYS_KIND8_POS = 0
 #############################################################################
 # Compute NVAR
 # MHD stores B in separate face arrays (bold/bnew), not in uold. Keep the
@@ -114,6 +116,9 @@ ifneq ($(NPRE),8)
 endif
 ifneq ($(NHILBERT),1)
    DEFINES += -DNHILBERT=$(NHILBERT)
+endif
+ifeq ($(ALWAYS_KIND8_POS),1)
+   DEFINES += -DALWAYS_KIND8_POS
 endif
 # Warp-cooperative fine-force gather in the GPU particle kick (default OFF).
 # NB: hackathon_common.sh passes KICK_COOP_GATHER on the make command line;

@@ -11,7 +11,7 @@
 #   MHD_TURB_VRMS=N            initial RMS velocity for turb.py ICs (default 2.0)
 #   BUILD_BINARIES=0|1         rebuild binary (default 1)
 #   CLEAN=0|1                  make clean before build (default 1)
-#   GPU_NPRE=8                 precision (default 8 on Marlowe)
+#   GPU_NPRE=4                 precision (default 4; positions stay double via ALWAYS_KIND8_POS)
 #   GPU_ALWAYS_KIND8_POS=1     required for dust position kind=8 (default 1)
 
 set -euo pipefail
@@ -34,7 +34,7 @@ export GPU_TURB=0
 export GPU_GRAV=0
 export GPU_UNITS=
 export GPU_NPSCAL="${GPU_NPSCAL:-0}"
-export GPU_NPRE="${GPU_NPRE:-8}"
+export GPU_NPRE="${GPU_NPRE:-4}"
 export GPU_FASTMATH="${GPU_FASTMATH:-0}"
 export GPU_ALWAYS_KIND8_POS="${GPU_ALWAYS_KIND8_POS:-1}"
 export GPU_DEBUG="${GPU_DEBUG:-0}"
