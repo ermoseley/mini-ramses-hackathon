@@ -1,0 +1,87 @@
+! Decaying MHD turbulence (no dust), 3D unigrid, for the mini-ramses-dev GPU cube
+! MHD integrator. Turbulent velocity ICs from utils/py/grafic/turb.py
+! (hackathon_ensure_mhd_turb_decay_ics); NO stochastic driving (turb=.false.) and
+! NO dust (pic=.false.). Uniform rho/p threaded by a uniform Bz=4; the seeded
+! turbulent velocity field simply decays.
+!
+! Built for the nsubgrid_experiments branch (nsubgrid=2 MHD via dynamic shared
+! memory). Periodic (GPU MHD is periodic-only), HLLD 1D + 2D EMF.
+!
+! Default 64^3 (levelmin=levelmax=6); submit_profiles.sh mhd-turb-decay rewrites
+! levelmin/levelmax from MHD_TURB_LEVEL. initfile(1) is rewritten in place from
+! ${IC_DIR} by dmo_gpu.slurm / hackathon_stage_dmo_run_nml.
+!
+! Build: HYDRO=1 MHD=1 NPSCAL=0 NPRE=4 (NVAR=5; B in bold/bnew; no TURB, no FFTW).
+
+&RUN_PARAMS
+ cosmo=.false.
+ hydro=.true.
+ poisson=.false.
+ pic=.false.
+ nrestart=0
+ nstepmax=100000
+ nsubcycle=10*1,
+ ncontrol=1
+ nsuperoct=2
+ nremap=10
+ verbose=.false.
+ debug=.false.
+/
+
+&OUTPUT_PARAMS
+ delta_tout=0.25
+ tend=0.5
+/
+
+&INIT_PARAMS
+ filetype='grafic'
+ initfile(1)='ics_mhd_turb'
+/
+
+&AMR_PARAMS
+ levelmin=6
+ levelmax=6
+ ngridmax=400000
+ ncachemax=200000
+ nexpand=1,
+ boxlen=1
+/
+
+&TURB_PARAMS
+ turb=.false.
+/
+
+&HYDRO_PARAMS
+ gamma=1.4
+ courant_factor=0.8
+ slope_type=1
+ slope_mag_type=2
+ riemann='hlld'
+ riemann2d='hlld'
+ switch_llf_dmin=1e-5
+ smallc=1e-12
+ smallr=1e-10
+/
+
+&COOLING_PARAMS
+ isothermal=.true.
+ eos_type=1
+ eos_T2=34.25993294742506
+ T2max=34.25993294742506
+/
+
+&UNITS_PARAMS
+ units_density=7.0d-23
+ units_time=5.7815d13
+ units_length=3.08568d18
+/
+
+&BOUNDARY_PARAMS
+ periodic=.true.,.true.,.true.
+/
+
+&REFINE_PARAMS
+ interpol_var=0
+ interpol_type=0
+ err_grad_p=0.1
+/
