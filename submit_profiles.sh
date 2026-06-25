@@ -658,6 +658,23 @@ case "${cmd}" in
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-08:00:00}" dmo_gpu.slurm
     ;;
+  abc-l8)
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ohm}"
+    abc_nml="$(hackathon_nml abc_l8.nml)"
+    export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+    export GPU_INIT=ABC GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export DMO_NO_DEFAULT_CAPS=1
+    echo "== abc-l8: 256^3 unigrid INIT=ABC induction etamag=0.001 tend=46 NPRE=${GPU_NPRE} NML=${abc_nml}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.abc}" \
+    NML="${abc_nml}" PROFILE=run \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}" \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-06:00:00}" dmo_gpu.slurm
+    ;;
   pono)
     export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ohm}"
     pono_nml="$(hackathon_nml pono.nml)"
