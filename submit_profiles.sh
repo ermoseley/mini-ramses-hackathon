@@ -652,7 +652,7 @@ case "${cmd}" in
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \
     GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
-    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.abc}" \
     NML="${abc_nml}" PROFILE=run \
     DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}" \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
@@ -669,7 +669,7 @@ case "${cmd}" in
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \
     GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
-    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.pono}" \
     NML="${pono_nml}" PROFILE=run \
     DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}" \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
