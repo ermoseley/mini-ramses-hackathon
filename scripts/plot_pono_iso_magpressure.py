@@ -95,15 +95,18 @@ def _mesh_facecolors(verts: np.ndarray, faces: np.ndarray, boxlen: float, cmap) 
     return colors
 
 
-def _clean_axes(ax, boxlen: float) -> None:
-    ticks = np.array([0.0, 0.5 * boxlen, boxlen])
-    ticklabels = [f"{t:.1f}" for t in ticks]
-    ax.set_xticks(ticks)
-    ax.set_yticks(ticks)
-    ax.set_zticks(ticks)
-    ax.set_xticklabels(ticklabels)
-    ax.set_yticklabels(ticklabels)
-    ax.set_zticklabels(ticklabels)
+def _axis_limits(verts: np.ndarray, boxlen: float, margin_frac: float) -> tuple[np.ndarray, np.ndarray]:
+    lo = verts.min(axis=0)
+    hi = verts.max(axis=0)
+    pad = np.maximum(margin_frac * (hi - lo), 0.02 * boxlen)
+    return lo - pad, hi + pad
+
+
+def _clean_axes(ax, lo: np.ndarray, hi: np.ndarray) -> None:
+    for i, axis in enumerate((ax.xaxis, ax.yaxis, ax.zaxis)):
+        ticks = np.array([lo[i], 0.5 * (lo[i] + hi[i]), hi[i]])
+        axis.set_ticks(ticks)
+        axis.set_ticklabels([f"{t:.1f}" for t in ticks])
     ax.tick_params(labelsize=7, colors="0.25", pad=0)
     for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
         axis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
@@ -122,6 +125,7 @@ def main() -> int:
     ap.add_argument("--grid", type=int, default=128)
     ap.add_argument("--center-frac", type=float, default=0.5)
     ap.add_argument("--smooth-sigma", type=float, default=1.0)
+    ap.add_argument("--margin-frac", type=float, default=0.18)
     args = ap.parse_args()
 
     run_dir = args.run_dir.resolve()
@@ -152,10 +156,11 @@ def main() -> int:
 
     ng = cube.shape[0]
     spacing = boxlen / ng
+    pad_val = float(np.min(cube))
+    cube = np.pad(cube, 1, mode="constant", constant_values=pad_val)
     verts, faces, _, _ = marching_cubes(cube, level=isolevel, spacing=(spacing, spacing, spacing))
-    verts[:, 0] += xmin
-    verts[:, 1] += ymin
-    verts[:, 2] += zmin
+    origin = np.array([xmin, ymin, zmin]) - spacing
+    verts += origin
 
     import matplotlib
 
@@ -172,22 +177,26 @@ def main() -> int:
         linewidths=0.0,
         antialiased=True,
     )
+    mesh.set_clip_on(False)
     ax.add_collection3d(mesh)
     ax.set_xlabel(r"$x$ [code units]", labelpad=3, fontsize=9)
     ax.set_ylabel(r"$y$ [code units]", labelpad=3, fontsize=9)
     ax.set_zlabel(r"$z$ [code units]", labelpad=3, fontsize=9)
-    ax.set_xlim(0.0, boxlen)
-    ax.set_ylim(0.0, boxlen)
-    ax.set_zlim(0.0, boxlen)
+    lo, hi = _axis_limits(verts, boxlen, args.margin_frac)
+    span = hi - lo
+    ax.set_xlim(lo[0], hi[0])
+    ax.set_ylim(lo[1], hi[1])
+    ax.set_zlim(lo[2], hi[2])
     ax.set_title(f"Ponomarenko magnetic pressure, $B^2/2$ (t={time:.3f})", pad=10, fontsize=13)
     ax.view_init(elev=19, azim=-38)
-    ax.set_box_aspect((1.0, 1.0, 1.0), zoom=1.22)
+    ax.set_box_aspect(span, zoom=0.85)
     ax.set_proj_type("persp", focal_length=0.9)
-    _clean_axes(ax, boxlen)
+    _clean_axes(ax, lo, hi)
 
     out = args.out or (run_dir / f"pono_iso_magpressure_{nout:05d}.png")
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.04)
+    fig.subplots_adjust(left=0.0, right=1.0, bottom=0.0, top=1.0)
+    fig.savefig(out, dpi=300, pad_inches=0.12)
     plt.close(fig)
     print(
         f"wrote {out} (t={time:.6f}, isolevel={isolevel:.6g}, "
