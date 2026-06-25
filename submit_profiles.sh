@@ -17,6 +17,8 @@
 #   ./submit_profiles.sh debug-cosmo-cpu-unigrid  # 96-rank CPU unigrid parity smoke
 #   ./submit_profiles.sh cosmo-zoom   # cosmological zoom DM+gas (cosmo_zoom.nml), GPU HYDRO=1
 #   ./submit_profiles.sh brio-wu      # 3D Brio-Wu MHD shock tube (brio_wu.nml), GPU MHD=1 HLLD, 128^3 unigrid
+#   ./submit_profiles.sh abc          # ABC-flow resistive MHD (abc.nml), INIT=ABC, 128^3, etamag=0.001
+#   ./submit_profiles.sh pono         # Ponomarenko resistive MHD AMR (pono.nml), INIT=PONO, L5->L8
 #   ./submit_profiles.sh mhd-turb     # 3D driven MHD turbulence (mhd_turb.nml), GPU MHD=1 TURB=1 HLLD, 64^3 unigrid, uniform IC Bz=4
 #   ./submit_profiles.sh orszag-tang      # 3D Orszag-Tang MHD vortex (orszag_tang.nml), GPU MHD=1 HLLD, 256^3 unigrid (z-symmetry)
 #   ./submit_profiles.sh ot-amr           # Orszag-Tang MHD AMR (orszag_tang_amr.nml), 32^3 base L5->L8, err_grad_p=0.15
@@ -24,6 +26,10 @@
 #   ./submit_profiles.sh nsys-ot          # nsys profile of Orszag-Tang MHD vortex (128^3, NPRE=8, 5 timesteps)
 #   ./submit_profiles.sh nsys-dust        # nsys: 256^3 decaying MHD turb + dust, 1 grain/cell, 10 steps
 #   ./submit_profiles.sh nsys-dust-12     # nsys: same with 12 grains/cell
+#   ./submit_profiles.sh nsys-dust-64     # nsys: same with 64 grains/cell
+#   ./submit_profiles.sh ncu-dust-12      # ncu kick_drift_dust_kernel, 12 grains/cell (GPU_DUST_COOP_KICK=0|1)
+#   ./submit_profiles.sh ncu-dust-64      # ncu kick_drift_dust_kernel, 64 grains/cell (coop sharing regime)
+#   ./submit_profiles.sh ncu-dust-12-pair # ncu A/B scalar vs coop kick-drift (2 sequential jobs)
 #   ./submit_profiles.sh nsys-oth         # same as nsys-ot but MHD=0 (hydro-only speed comparison)
 #   ./submit_profiles.sh ncu-ot           # ncu profile of hydro_integrator_kernel (Orszag-Tang, 2 steps)
 #   ./submit_profiles.sh ncu-ot-localize  # ncu-ot + lineinfo + --import-source + source-page export (128^3 default)
@@ -59,6 +65,9 @@ echo "== GPU_KICK_COOP_GATHER=${GPU_KICK_COOP_GATHER} (warp-cooperative kick gat
 
 export GPU_KICK_COOP_VALIDATE="${GPU_KICK_COOP_VALIDATE:-0}"
 echo "== GPU_KICK_COOP_VALIDATE=${GPU_KICK_COOP_VALIDATE} (in-kernel coop-vs-scalar exact A/B; needs GPU_KICK_COOP_GATHER=1)"
+
+export GPU_DUST_COOP_KICK="${GPU_DUST_COOP_KICK:-0}"
+echo "== GPU_DUST_COOP_KICK=${GPU_DUST_COOP_KICK} (warp-cooperative charged-dust hydro/B kick gather)"
 
 export GPU_NPRE="${GPU_NPRE:-4}"
 export GPU_FASTMATH="${GPU_FASTMATH:-0}"
@@ -176,6 +185,185 @@ hackathon_submit_ncu_ot() {
   echo "(RUN_DIR=${profile_run_dir}; on Stellar this is often /scratch/gpfs/\$USER/hackathon, not ~/hackathon)"
   echo "Job log: ${HARNESS}/dmo_gpu_${job_id}.out"
   echo "Validate source before optimizing: ./validate_ncu_source.sh ${profile_run_dir}/dmo_gpu_${job_id}/${ot_case}/ncu_${ot_case}.ncu-rep ${profile_run_dir}/dmo_gpu_${job_id}/${ot_case}"
+}
+
+# NCU profile of kick_drift_dust_kernel on mhd_turb_dust_l8 (decaying MHD turb + dust).
+# Returns job id on stdout (for ncu-dust-12-pair dependency wiring).
+hackathon_submit_ncu_dust() {
+  local dust_ppc="$1"
+  local coop_kick="$2"
+  local build_binaries="${3:-1}"
+  local dep="${4:-${NCU_DUST_DEP:-}}"
+  local mt_nml profile_run_dir job_id arm_label mt_case slurm_mem slurm_time dust_level
+
+  export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_dust}"
+  export MHD_TURB_DUST=1
+  # L8 64 ppc (~1.07B grains) OOMs on 40GB A100; L7 128^3 keeps 64 ppc with fewer
+  # total grains than L8 12 ppc. Override with MHD_TURB_DUST_LEVEL=8 if you have 80GB+.
+  if [[ -n "${MHD_TURB_DUST_LEVEL:-}" ]]; then
+    dust_level="${MHD_TURB_DUST_LEVEL}"
+  elif (( dust_ppc >= 64 )); then
+    dust_level=7
+  else
+    dust_level=8
+  fi
+  hackathon_ensure_mhd_turb_decay_ics "${dust_level}" >&2
+  if [[ "${dust_level}" == "8" ]]; then
+    mt_nml="$(hackathon_nml mhd_turb_dust_l8.nml)"
+  else
+    mt_nml="${HARNESS}/namelists/mhd_turb_dust_l${dust_level}.nml"
+    sed -E \
+      "s/^[[:space:]]*levelmin=.*/ levelmin=${dust_level}/; s/^[[:space:]]*levelmax=.*/ levelmax=${dust_level}/" \
+      "$(hackathon_nml mhd_turb_dust_l8.nml)" > "${mt_nml}"
+  fi
+  mt_case="$(basename "${mt_nml}" .nml)"
+  export GPU_HYDRO=1 GPU_MHD=1 GPU_TURB=0 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+  export GPU_FASTMATH="${GPU_FASTMATH:-0}"
+  export GPU_NPRE="${GPU_NPRE:-4}"
+  export GPU_ALWAYS_KIND8_POS="${GPU_ALWAYS_KIND8_POS:-1}"
+  export GPU_DUST_COOP_KICK="${coop_kick}"
+  export IC_DIR
+  export DMO_TEND="${DMO_TEND:-0.5}"
+  export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
+  export DMO_NSTEPMAX="${DMO_NSTEPMAX:-3}"
+  export DMO_NDUST_PER_CELL="${DMO_NDUST_PER_CELL:-${dust_ppc}}"
+  arm_label="scalar"
+  [[ "${coop_kick}" == "1" ]] && arm_label="coop"
+  if (( dust_ppc >= 64 )); then
+    slurm_mem="${DMO_SLURM_MEM:-120G}"
+    slurm_time="${DMO_SLURM_TIME:-08:00:00}"
+  else
+    slurm_mem="${DMO_SLURM_MEM:-80G}"
+    slurm_time="${DMO_SLURM_TIME:-04:00:00}"
+  fi
+  echo "== ncu-dust-${dust_ppc} (${arm_label}): kick_drift_dust_kernel level=${dust_level} ($((2**dust_level))^3) nstepmax=${DMO_NSTEPMAX} ppc=${DMO_NDUST_PER_CELL} DUST_COOP_KICK=${coop_kick} NPRE=${GPU_NPRE}" >&2
+  if [[ -n "${DMO_NRESTART:-}" ]]; then
+    echo "           restart nrestart=${DMO_NRESTART} backup=${DMO_RESTART_BACKUP_DIR:-<unset>} nstep_add=${DMO_NSTEP_ADD:-<unset>}" >&2
+  fi
+  echo "           NML=${mt_nml} IC_DIR=${IC_DIR} BUILD_BINARIES=${build_binaries} wall=${slurm_time} mem=${slurm_mem}" >&2
+  job_id="$(
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    GPU_LINEINFO="${GPU_LINEINFO:-0}" \
+    GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    GPU_DUST_COOP_KICK="${coop_kick}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.dust}" \
+    NML="${mt_nml}" PROFILE=ncu \
+    NCU_KERNEL="${NCU_KERNEL:-regex:.*kick_drift_dust_kernel.*}" \
+    NCU_LAUNCH_SKIP="${NCU_LAUNCH_SKIP:-1}" \
+    NCU_LAUNCH_COUNT="${NCU_LAUNCH_COUNT:-5}" \
+    NCU_SET="${NCU_SET:-full}" \
+    NCU_IMPORT_SOURCE="${NCU_IMPORT_SOURCE:-no}" \
+    NCU_EXPORT_SOURCE="${NCU_EXPORT_SOURCE:-0}" \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-0}" \
+    BUILD_BINARIES="${build_binaries}" \
+      hackathon_sbatch --parsable ${dep:+"${dep}"} --time="${slurm_time}" --mem="${slurm_mem}" dmo_gpu.slurm
+  )"
+  profile_run_dir="${RUN_DIR:-${HARNESS}}"
+  echo "Submitted NCU dust job ${job_id} (${arm_label}, kick_drift_dust_kernel)" >&2
+  echo "  ${profile_run_dir}/dmo_gpu_${job_id}/${mt_case}/ncu_${mt_case}.ncu-rep" >&2
+  echo "  log: ${HARNESS}/dmo_gpu_${job_id}.out" >&2
+  echo "Export raw CSV: ncu --import ${profile_run_dir}/dmo_gpu_${job_id}/${mt_case}/ncu_${mt_case}.ncu-rep --csv --page raw > ncu_dust_${arm_label}_raw.csv" >&2
+  printf '%s\n' "${job_id}"
+}
+
+# Plain GPU run: Orszag-Tang vortex + dust (orszag_tang_dust.nml). Returns job id.
+hackathon_submit_ot_dust() {
+  local dust_ppc="$1"
+  local coop_kick="$2"
+  local build_binaries="${3:-1}"
+  local dep="${4:-}"
+  local ot_level ot_nml job_id arm_label slurm_mem slurm_time
+
+  export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_dust}"
+  export ORSZAG_TANG_DUST=1
+  ot_level="${ORSZAG_TANG_LEVEL:-8}"
+  hackathon_ensure_orszag_tang_ics "${ot_level}" >&2
+  if [[ "${ot_level}" == "8" ]]; then
+    ot_nml="$(hackathon_nml orszag_tang_dust.nml)"
+  else
+    ot_nml="${HARNESS}/namelists/orszag_tang_dust_l${ot_level}.nml"
+    sed -E \
+      "s/^[[:space:]]*levelmin=.*/ levelmin=${ot_level}/; s/^[[:space:]]*levelmax=.*/ levelmax=${ot_level}/" \
+      "$(hackathon_nml orszag_tang_dust.nml)" > "${ot_nml}"
+  fi
+  export GPU_HYDRO=1 GPU_MHD=1 GPU_TURB=0 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+  export GPU_FASTMATH="${GPU_FASTMATH:-0}"
+  export GPU_NPRE="${GPU_NPRE:-4}"
+  export GPU_ALWAYS_KIND8_POS="${GPU_ALWAYS_KIND8_POS:-1}"
+  export GPU_DUST_COOP_KICK="${coop_kick}"
+  export IC_DIR
+  export DMO_TEND="${DMO_TEND:-0.5}"
+  export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
+  export DMO_NSTEPMAX="${DMO_NSTEPMAX:-100000}"
+  export DMO_NDUST_PER_CELL="${DMO_NDUST_PER_CELL:-${dust_ppc}}"
+  arm_label="scalar"
+  [[ "${coop_kick}" == "1" ]] && arm_label="coop"
+  slurm_mem="${DMO_SLURM_MEM:-80G}"
+  slurm_time="${DMO_SLURM_TIME:-04:00:00}"
+  echo "== orszag-tang-dust (${arm_label}): level=${ot_level} ($((2**ot_level))^3) ppc=${DMO_NDUST_PER_CELL} DUST_COOP_KICK=${coop_kick} NPRE=${GPU_NPRE} tend=${DMO_TEND}" >&2
+  echo "           NML=${ot_nml} IC_DIR=${IC_DIR} BUILD_BINARIES=${build_binaries} wall=${slurm_time} mem=${slurm_mem}" >&2
+  job_id="$(
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    GPU_DUST_COOP_KICK="${coop_kick}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.dust}" \
+    NML="${ot_nml}" PROFILE=run \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-0}" \
+    BUILD_BINARIES="${build_binaries}" \
+      hackathon_sbatch --parsable ${dep:+"${dep}"} --time="${slurm_time}" --mem="${slurm_mem}" dmo_gpu.slurm
+  )"
+  echo "Submitted orszag-tang-dust job ${job_id} (${arm_label})" >&2
+  echo "  log: ${HARNESS}/dmo_gpu_${job_id}.out" >&2
+  printf '%s\n' "${job_id}"
+}
+
+# Plain GPU run: decaying MHD turb + dust (mhd_turb_dust_l8.nml). Returns job id.
+hackathon_submit_mhd_turb_dust() {
+  local dust_ppc="$1"
+  local coop_kick="$2"
+  local build_binaries="${3:-1}"
+  local dep="${4:-}"
+  local mt_nml job_id arm_label slurm_mem slurm_time
+
+  export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_dust}"
+  export MHD_TURB_DUST=1
+  hackathon_ensure_mhd_turb_decay_ics 8 >&2
+  mt_nml="$(hackathon_nml mhd_turb_dust_l8.nml)"
+  export GPU_HYDRO=1 GPU_MHD=1 GPU_TURB=0 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+  export GPU_FASTMATH="${GPU_FASTMATH:-0}"
+  export GPU_NPRE="${GPU_NPRE:-4}"
+  export GPU_ALWAYS_KIND8_POS="${GPU_ALWAYS_KIND8_POS:-1}"
+  export GPU_DUST_COOP_KICK="${coop_kick}"
+  export IC_DIR
+  export DMO_TEND="${DMO_TEND:-0.5}"
+  export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
+  export DMO_NSTEPMAX="${DMO_NSTEPMAX:-100000}"
+  export DMO_NDUST_PER_CELL="${DMO_NDUST_PER_CELL:-${dust_ppc}}"
+  arm_label="scalar"
+  [[ "${coop_kick}" == "1" ]] && arm_label="coop"
+  slurm_mem="${DMO_SLURM_MEM:-80G}"
+  slurm_time="${DMO_SLURM_TIME:-06:00:00}"
+  echo "== mhd-turb-dust (${arm_label}): 256^3 decay ppc=${DMO_NDUST_PER_CELL} Bz=${MHD_TURB_BZ:-4} vrms=${MHD_TURB_VRMS:-2.0} beta_plasma=${MHD_TURB_PLASMA_BETA:-n/a} grain_size=${MHD_TURB_GRAIN_SIZE:-0.1} charge=${MHD_TURB_GRAIN_CHARGE:-100} DUST_COOP_KICK=${coop_kick} NPRE=${GPU_NPRE}" >&2
+  echo "           NML=${mt_nml} IC_DIR=${IC_DIR} BUILD_BINARIES=${build_binaries} wall=${slurm_time} mem=${slurm_mem}" >&2
+  job_id="$(
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    GPU_DUST_COOP_KICK="${coop_kick}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.dust}" \
+    NML="${mt_nml}" PROFILE=run \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-0}" \
+    BUILD_BINARIES="${build_binaries}" \
+      hackathon_sbatch --parsable ${dep:+"${dep}"} --time="${slurm_time}" --mem="${slurm_mem}" dmo_gpu.slurm
+  )"
+  echo "Submitted mhd-turb-dust job ${job_id} (${arm_label})" >&2
+  echo "  log: ${HARNESS}/dmo_gpu_${job_id}.out" >&2
+  printf '%s\n' "${job_id}"
 }
 
 case "${cmd}" in
@@ -453,6 +641,40 @@ case "${cmd}" in
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" dmo_gpu.slurm
     ;;
+  abc)
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ohm}"
+    abc_nml="$(hackathon_nml abc.nml)"
+    export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+    export GPU_INIT=ABC GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export DMO_NO_DEFAULT_CAPS=1
+    echo "== abc: 128^3 unigrid INIT=ABC induction etamag=0.001 NPRE=${GPU_NPRE} NML=${abc_nml}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd}" \
+    NML="${abc_nml}" PROFILE=run \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}" \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-08:00:00}" dmo_gpu.slurm
+    ;;
+  pono)
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ohm}"
+    pono_nml="$(hackathon_nml pono.nml)"
+    export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+    export GPU_INIT=PONO GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export DMO_NO_DEFAULT_CAPS=1
+    echo "== pono: AMR L5->L8 INIT=PONO induction etamag=0.0025 NPRE=${GPU_NPRE} NML=${pono_nml}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd}" \
+    NML="${pono_nml}" PROFILE=run \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}" \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-24:00:00}" dmo_gpu.slurm
+    ;;
   mhd-turb)
     # Driven MHD turbulence on the GPU: host generates the turbulent acceleration
     # field (FFTW), the three turb_device kernels interpolate it onto the grid and
@@ -551,18 +773,31 @@ case "${cmd}" in
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \
     GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    GPU_DUST_COOP_KICK="${GPU_DUST_COOP_KICK:-0}" \
     BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.dust}" \
     NML="${mt_nml}" PROFILE=run \
     DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}" \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-${default_time}}" --mem=80G dmo_gpu.slurm
     ;;
-  nsys-dust|nsys-dust-12)
+  mhd-turb-dust-12-beta-pair)
+    # 256^3 decaying MHD turb + dust, 12 ppc, plasma beta=0.1 (Bz~0.779), grain 0.1 / charge 100.
+    export MHD_TURB_PLASMA_BETA="${MHD_TURB_PLASMA_BETA:-0.1}"
+    export MHD_TURB_BZ="${MHD_TURB_BZ:-0.7792435587233456}"
+    export MHD_TURB_IC_ROOT="${MHD_TURB_IC_ROOT:-${HARNESS}/ics_mhd_turb_beta01}"
+    export MHD_TURB_GRAIN_SIZE="${MHD_TURB_GRAIN_SIZE:-0.1}"
+    export MHD_TURB_GRAIN_CHARGE="${MHD_TURB_GRAIN_CHARGE:-100}"
+    job_scalar="$(hackathon_submit_mhd_turb_dust 12 0 1 | tail -1)"
+    job_coop="$(hackathon_submit_mhd_turb_dust 12 1 1 "--dependency=afterok:${job_scalar}" | tail -1)"
+    echo "Submitted mhd-turb-dust pair (12 ppc, beta=${MHD_TURB_PLASMA_BETA}): scalar=${job_scalar} coop=${job_coop}"
+    ;;
+  nsys-dust|nsys-dust-12|nsys-dust-64)
     # Nsight Systems profile: 256^3 decaying MHD turbulence + GPU dust (mhd_turb_dust_l8.nml).
-    # Default 10 coarse steps; 1 vs 12 grains/cell via case name.
+    # Default 10 coarse steps; grains/cell via case name (1, 12, or 64).
     case "${cmd}" in
       nsys-dust) dust_ppc=1 ;;
       nsys-dust-12) dust_ppc=12 ;;
+      nsys-dust-64) dust_ppc=64 ;;
     esac
     export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_dust}"
     export MHD_TURB_DUST=1
@@ -577,18 +812,85 @@ case "${cmd}" in
     export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
     export DMO_NSTEPMAX="${DMO_NSTEPMAX:-10}"
     export DMO_NDUST_PER_CELL="${DMO_NDUST_PER_CELL:-${dust_ppc}}"
+    if (( dust_ppc >= 64 )); then
+      dust_mem="${DMO_SLURM_MEM:-120G}"
+      dust_time="${DMO_SLURM_TIME:-04:00:00}"
+    else
+      dust_mem="${DMO_SLURM_MEM:-80G}"
+      dust_time="${DMO_SLURM_TIME:-02:00:00}"
+    fi
     echo "== ${cmd}: 256^3 decaying MHD turb + dust PROFILE=nsys ppc=${DMO_NDUST_PER_CELL} nstepmax=${DMO_NSTEPMAX}"
     echo "           NML=${mt_nml} IC_DIR=${IC_DIR} BIN=${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.dust}"
-    echo "           BUILD_BINARIES=${BUILD_BINARIES:-0} wall=${DMO_SLURM_TIME:-02:00:00}"
+    echo "           BUILD_BINARIES=${BUILD_BINARIES:-0} wall=${dust_time} mem=${dust_mem}"
     GPU_DEBUG="${GPU_DEBUG:-0}" \
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \
     GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    GPU_DUST_COOP_KICK="${GPU_DUST_COOP_KICK:-0}" \
     BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.dust}" \
     NML="${mt_nml}" PROFILE=nsys \
     DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-0}" \
     BUILD_BINARIES="${BUILD_BINARIES:-0}" \
-      hackathon_sbatch --time="${DMO_SLURM_TIME:-02:00:00}" --mem=80G dmo_gpu.slurm
+      hackathon_sbatch --time="${dust_time}" --mem="${dust_mem}" dmo_gpu.slurm
+    ;;
+  ncu-dust|ncu-dust-12|ncu-dust-24|ncu-dust-64)
+    # NCU full-set profile of kick_drift_dust_kernel (256^3 decaying MHD turb + dust).
+    # grains/cell via case name (1, 12, 24, or 64). Override arm via GPU_DUST_COOP_KICK.
+    case "${cmd}" in
+      ncu-dust) dust_ppc=1 ;;
+      ncu-dust-12) dust_ppc=12 ;;
+      ncu-dust-24) dust_ppc=24 ;;
+      ncu-dust-64) dust_ppc=64 ;;
+    esac
+    hackathon_submit_ncu_dust "${dust_ppc}" "${GPU_DUST_COOP_KICK:-0}" "${BUILD_BINARIES:-1}" "${NCU_DUST_DEP:-}"
+    ;;
+  ncu-dust-64-pair)
+    job_scalar="$(hackathon_submit_ncu_dust 64 0 1 | tail -1)"
+    job_coop="$(hackathon_submit_ncu_dust 64 1 1 "--dependency=afterok:${job_scalar}" | tail -1)"
+    echo "Submitted NCU dust kick-drift pair (64 ppc): scalar=${job_scalar} coop=${job_coop} (coop waits for scalar)"
+    ;;
+  ncu-dust-24-pair)
+    job_scalar="$(hackathon_submit_ncu_dust 24 0 1 | tail -1)"
+    job_coop="$(hackathon_submit_ncu_dust 24 1 1 "--dependency=afterok:${job_scalar}" | tail -1)"
+    echo "Submitted NCU dust kick-drift pair (24 ppc): scalar=${job_scalar} coop=${job_coop} (coop waits for scalar)"
+    ;;
+  ncu-dust-1-pair)
+    job_scalar="$(hackathon_submit_ncu_dust 1 0 1 | tail -1)"
+    job_coop="$(hackathon_submit_ncu_dust 1 1 1 "--dependency=afterok:${job_scalar}" | tail -1)"
+    echo "Submitted NCU dust kick-drift pair (1 ppc): scalar=${job_scalar} coop=${job_coop} (coop waits for scalar)"
+    ;;
+  ncu-dust-12-pair)
+    # A/B NCU: scalar (DUST_COOP_KICK=0) then coop (DUST_COOP_KICK=1); sequential build avoids binary race.
+    job_scalar="$(hackathon_submit_ncu_dust 12 0 1 | tail -1)"
+    job_coop="$(hackathon_submit_ncu_dust 12 1 1 "--dependency=afterok:${job_scalar}" | tail -1)"
+    echo "Submitted NCU dust kick-drift pair: scalar=${job_scalar} coop=${job_coop} (coop waits for scalar)"
+    ;;
+  ncu-dust-12-restart-pair)
+    # NCU A/B from backup_00002 (decaying MHD turb + dust, beta=0.1). Requires DMO_RESTART_BACKUP_DIR.
+    export MHD_TURB_PLASMA_BETA="${MHD_TURB_PLASMA_BETA:-0.1}"
+    export MHD_TURB_BZ="${MHD_TURB_BZ:-0.7792435587233456}"
+    export MHD_TURB_IC_ROOT="${MHD_TURB_IC_ROOT:-${HARNESS}/ics_mhd_turb_beta01}"
+    export MHD_TURB_GRAIN_SIZE="${MHD_TURB_GRAIN_SIZE:-0.1}"
+    export MHD_TURB_GRAIN_CHARGE="${MHD_TURB_GRAIN_CHARGE:-100}"
+    export DMO_NRESTART="${DMO_NRESTART:-2}"
+    export DMO_RESTART_BACKUP_DIR="${DMO_RESTART_BACKUP_DIR:-/scratch/gpfs/moseley/hackathon/recent/dmo_gpu_2844352/mhd_turb_dust_l8/backup_00002}"
+    export DMO_NSTEP_ADD="${DMO_NSTEP_ADD:-3}"
+    export DMO_NSTEPMAX="${DMO_NSTEPMAX:-3}"
+    export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
+    export DMO_TEND="${DMO_TEND:-2.0}"
+    job_scalar="$(hackathon_submit_ncu_dust 12 0 "${BUILD_BINARIES:-1}" | tail -1)"
+    job_coop="$(hackathon_submit_ncu_dust 12 1 "${BUILD_BINARIES:-1}" "--dependency=afterok:${job_scalar}" | tail -1)"
+    echo "Submitted NCU dust restart pair (backup_00002, t~0.804): scalar=${job_scalar} coop=${job_coop}"
+    ;;
+  orszag-tang-dust-12-pair)
+    job_scalar="$(hackathon_submit_ot_dust 12 0 1 | tail -1)"
+    job_coop="$(hackathon_submit_ot_dust 12 1 1 "--dependency=afterok:${job_scalar}" | tail -1)"
+    echo "Submitted Orszag-Tang dust pair (12 ppc): scalar=${job_scalar} coop=${job_coop} (coop waits for scalar)"
+    ;;
+  orszag-tang-dust-32-pair)
+    job_scalar="$(hackathon_submit_ot_dust 32 0 1 | tail -1)"
+    job_coop="$(hackathon_submit_ot_dust 32 1 1 "--dependency=afterok:${job_scalar}" | tail -1)"
+    echo "Submitted Orszag-Tang dust pair (32 ppc): scalar=${job_scalar} coop=${job_coop} (coop waits for scalar)"
     ;;
   orszag-tang)
     # Orszag-Tang vortex on the GPU cube ("rock") MHD integrator, HLLD by default
@@ -927,10 +1229,20 @@ Hackathon profile launcher (run from ${HARNESS})
   ./submit_profiles.sh debug-cosmo-cpu-unigrid  unigrid CPU smoke (50 steps default)
   ./submit_profiles.sh cosmo-zoom    cosmo_zoom.nml zoom DM+gas (NPRE=8, FASTMATH=1, ngridmax=24M)
   ./submit_profiles.sh brio-wu       brio_wu.nml 3D Brio-Wu MHD shock tube (MHD=1, HLLD, 128^3 unigrid; auto ICs)
+  ./submit_profiles.sh abc           abc.nml ABC-flow resistive MHD (INIT=ABC, 128^3 unigrid, etamag=0.001; gpu_ohm)
+  ./submit_profiles.sh pono          pono.nml Ponomarenko resistive MHD AMR (INIT=PONO, L5->L8, etamag=0.0025; gpu_ohm)
   ./submit_profiles.sh mhd-turb-l8-full   mhd_turb_full_l8.nml (256^3 HLLD)
   ./submit_profiles.sh mhd-turb-dust-l8   mhd_turb_dust_l8.nml (256^3 decaying MHD turb + dust, turb.py ICs, ALWAYS_KIND8_POS=1)
   ./submit_profiles.sh nsys-dust          nsys profile decaying MHD turb + dust L8, 1 grain/cell, 10 steps
   ./submit_profiles.sh nsys-dust-12       nsys profile decaying MHD turb + dust L8, 12 grains/cell, 10 steps
+  ./submit_profiles.sh nsys-dust-64       nsys profile decaying MHD turb + dust L8, 64 grains/cell, 10 steps
+  ./submit_profiles.sh ncu-dust           ncu kick_drift_dust_kernel, 1 grain/cell, 3 steps (GPU_DUST_COOP_KICK=0|1)
+  ./submit_profiles.sh ncu-dust-12        ncu kick_drift_dust_kernel, 12 grains/cell, 3 steps (GPU_DUST_COOP_KICK=0|1)
+  ./submit_profiles.sh ncu-dust-64        ncu kick_drift_dust_kernel, 64 grains/cell, 3 steps (120G, 8h wall default)
+  ./submit_profiles.sh ncu-dust-1-pair      ncu A/B: scalar then coop kick_drift_dust, 1 ppc L8 reference (2 sequential jobs)
+  ./submit_profiles.sh ncu-dust-12-pair     ncu A/B: scalar then coop kick_drift_dust, 12 ppc (2 sequential jobs)
+  ./submit_profiles.sh ncu-dust-24-pair     ncu A/B: scalar then coop kick_drift_dust, 24 ppc L8 (2 sequential jobs)
+  ./submit_profiles.sh ncu-dust-64-pair     ncu A/B: scalar then coop kick_drift_dust, 64 ppc (2 sequential jobs)
   ./submit_profiles.sh mhd-turb      mhd_turb.nml 3D driven MHD turbulence (MHD=1 TURB=1, 64^3 unigrid, uniform IC Bz=4; gpu_turb)
   ./submit_profiles.sh orszag-tang      orszag_tang.nml 3D Orszag-Tang MHD vortex GPU (MHD=1, HLLD, 256^3 unigrid; auto ICs)
   ./submit_profiles.sh ot-amr           orszag_tang_amr.nml Orszag-Tang MHD AMR GPU (32^3 base L5->L8, err_grad_p=0.15; auto ICs)
@@ -956,6 +1268,8 @@ Environment (prefix or export before submit):
                     controls ncu/ncu-cic and nsys-l7 -- no longer hardcoded 1 there)
   GPU_KICK_COOP_VALIDATE=0|1  in-kernel exact A/B vs scalar gather (default 0;
                     needs GPU_KICK_COOP_GATHER=1; correctness runs only)
+  GPU_DUST_COOP_KICK=0|1  warp-cooperative charged-dust hydro/B kick gather
+                    (default 0; use with nsys-dust / nsys-dust-12)
   IC_ZOOM_DIR=PATH  zoom grafic IC root (default: ~/hackathon/ics_zoom; auto-download)
   BRIO_WU_LEVEL=N   brio-wu resolution 2^N per axis (default 7=128^3; 6=64^3 fits a 40GB A100)
   MHD_TURB_LEVEL=N  mhd-turb resolution 2^N per axis (default 6=64^3; needs gpu_turb branch)

@@ -324,6 +324,9 @@ hackathon_ensure_orszag_tang_ics() {
   if hackathon_grafic_mhd_ics_complete "${ic_dir}"; then
     echo "== orszag-tang ICs present: ${ic_dir} (${n}^3)"
     export IC_DIR="${ic_dir}"
+    if [[ "${ORSZAG_TANG_DUST:-0}" == "1" ]]; then
+      hackathon_ensure_grafic_dust_vel_ics "${ic_dir}" || return 1
+    fi
     return 0
   fi
   if [[ -f "${ic_dir}/ic_d" ]]; then
@@ -353,6 +356,9 @@ hackathon_ensure_orszag_tang_ics() {
   fi
   echo "== orszag-tang ICs installed under ${ic_dir}"
   export IC_DIR="${ic_dir}"
+  if [[ "${ORSZAG_TANG_DUST:-0}" == "1" ]]; then
+    hackathon_ensure_grafic_dust_vel_ics "${ic_dir}" || return 1
+  fi
 }
 
 # Orszag-Tang MHD grafic ICs with checkerboard passive scalar (ot-pscal). Generated
@@ -1621,6 +1627,8 @@ hackathon_build_binary() {
   local gpu_units="${GPU_UNITS-COSMO}"  # MHD shock/vortex tests set GPU_UNITS= (omit UNITS=)
   local gpu_kick_coop_gather="${GPU_KICK_COOP_GATHER:-0}"
   local gpu_kick_coop_validate="${GPU_KICK_COOP_VALIDATE:-0}"
+  local gpu_dust_coop_kick="${GPU_DUST_COOP_KICK:-0}"
+  local dust_kick_blocks_per_sm="${GPU_DUST_KICK_BLOCKS_PER_SM:-6}"
   local cub_sort_part="${CUB_SORT_PART:-1}"
   local cub_sort_refine="${CUB_SORT_REFINE:-1}"
   local cub_scan_refine="${CUB_SCAN_REFINE:-1}"
@@ -1649,7 +1657,7 @@ hackathon_build_binary() {
     fi
   fi
   export BIN_GPU="${bin_gpu}"
-  echo "== building GPU binary from ${MINIRAM}/bin (Makefile=${makefile}, CUDA_ARCH=${gpu_cuda_arch} PAPER=${gpu_paper} MHD=${gpu_mhd} NPSCAL=${gpu_npscal} KICK_COOP_GATHER=${gpu_kick_coop_gather} KICK_COOP_VALIDATE=${gpu_kick_coop_validate} CUB_SORT_REFINE=${cub_sort_refine} CUB_SCAN_REFINE=${cub_scan_refine} FASTMATH=${gpu_fastmath})"
+  echo "== building GPU binary from ${MINIRAM}/bin (Makefile=${makefile}, CUDA_ARCH=${gpu_cuda_arch} PAPER=${gpu_paper} MHD=${gpu_mhd} NPSCAL=${gpu_npscal} KICK_COOP_GATHER=${gpu_kick_coop_gather} KICK_COOP_VALIDATE=${gpu_kick_coop_validate} DUST_COOP_KICK=${gpu_dust_coop_kick} DUST_KICK_BLOCKS_PER_SM=${dust_kick_blocks_per_sm} CUB_SORT_REFINE=${cub_sort_refine} CUB_SCAN_REFINE=${cub_scan_refine} FASTMATH=${gpu_fastmath})"
   echo "== GPU build: COMPILER=NVHPC DEBUG=${gpu_debug} NHILBERT=1 GRAV=${gpu_grav} HYDRO=${gpu_hydro} MHD=${gpu_mhd} TURB=${gpu_turb} NPSCAL=${gpu_npscal} NPRE=${gpu_npre} FASTMATH=${gpu_fastmath} ALWAYS_KIND8_POS=${GPU_ALWAYS_KIND8_POS:-0} NDIM=3${gpu_units:+ UNITS=${gpu_units}}${gpu_fftw:+ FFTW=${gpu_fftw}}${gpu_fftw_vendor:+ FFTW_VENDOR_INC=${gpu_fftw_vendor}}${gpu_fftw_header:+ FFTW_HEADER_DIR=${gpu_fftw_header}}"
   echo "== install target: ${BIN_GPU}"
   local gpu_clean="${CLEAN:-1}"
@@ -1685,6 +1693,8 @@ hackathon_build_binary() {
     NVHPC_MATH_LIB="${NVHPC_MATH_LIB:-}"
     CUDA_ARCH="${gpu_cuda_arch}" PAPER="${gpu_paper}"
     KICK_COOP_GATHER="${gpu_kick_coop_gather}" KICK_COOP_VALIDATE="${gpu_kick_coop_validate}"
+    DUST_COOP_KICK="${gpu_dust_coop_kick}"
+    DUST_KICK_BLOCKS_PER_SM="${dust_kick_blocks_per_sm}"
     CUB_SORT_PART="${cub_sort_part}" CUB_SORT_REFINE="${cub_sort_refine}" CUB_SCAN_REFINE="${cub_scan_refine}"
     FASTMATH="${gpu_fastmath}"
     CUDA_PROFILE="${cuda_profile}"
@@ -1704,6 +1714,9 @@ hackathon_build_binary() {
   fi
   if [[ "${GPU_ALWAYS_KIND8_POS:-0}" == "1" ]]; then
     make_args+=(ALWAYS_KIND8_POS=1)
+  fi
+  if [[ -n "${GPU_INIT:-}" ]]; then
+    make_args+=(INIT="${GPU_INIT}")
   fi
   (
     set -euo pipefail
@@ -2083,6 +2096,12 @@ hackathon_sbatch_export() {
   fi
   if [[ -n "${GPU_KICK_COOP_VALIDATE:-}" ]]; then
     flags="${flags},GPU_KICK_COOP_VALIDATE=${GPU_KICK_COOP_VALIDATE}"
+  fi
+  if [[ -n "${GPU_DUST_COOP_KICK:-}" ]]; then
+    flags="${flags},GPU_DUST_COOP_KICK=${GPU_DUST_COOP_KICK}"
+  fi
+  if [[ -n "${GPU_DUST_KICK_BLOCKS_PER_SM:-}" ]]; then
+    flags="${flags},GPU_DUST_KICK_BLOCKS_PER_SM=${GPU_DUST_KICK_BLOCKS_PER_SM}"
   fi
   if [[ -n "${GPU_HYDRO:-}" ]]; then
     flags="${flags},GPU_HYDRO=${GPU_HYDRO}"
