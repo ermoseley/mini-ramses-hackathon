@@ -120,6 +120,7 @@ def main() -> int:
     ap.add_argument("--cmap", default="Blues")
     ap.add_argument("--log10", action="store_true", default=True)
     ap.add_argument("--no-log10", action="store_false", dest="log10")
+    ap.add_argument("--label", default="ABC", help="run label for plot title")
     args = ap.parse_args()
 
     run_dir = args.run_dir.resolve()
@@ -150,7 +151,7 @@ def main() -> int:
     )
     ax.set_xlabel("x [code length]")
     ax.set_ylabel("z [code length]")
-    ax.set_title(f"ABC column magnetic energy (output {nout:05d}, t={time:.4f})")
+    ax.set_title(f"{args.label} column magnetic energy (output {nout:05d}, t={time:.4f})")
     cb = fig.colorbar(im, ax=ax, shrink=0.85)
     cb.set_label(r"$\log_{10}\,\int (B^2/2)\,dy$" if args.log10 else r"$\int (B^2/2)\,dy$")
     out.parent.mkdir(parents=True, exist_ok=True)
