@@ -47,8 +47,13 @@ def pick_output_id(run_dir: Path, output_id: int | None) -> int:
 def _resample_cube(cube: np.ndarray, n: int) -> np.ndarray:
     if cube.shape[0] == n:
         return cube
-    idx = np.linspace(0, cube.shape[0] - 1, n).astype(int)
-    return cube[np.ix_(idx, idx, idx)]
+    from scipy.ndimage import zoom
+
+    out = zoom(cube, n / cube.shape[0], order=1)
+    if out.shape[0] == n:
+        return out
+    idx = np.linspace(0, out.shape[0] - 1, n).astype(int)
+    return out[np.ix_(idx, idx, idx)]
 
 
 def _auto_isolevel(cube: np.ndarray, percentile: float, center_frac: float) -> float:
@@ -64,15 +69,59 @@ def _auto_isolevel(cube: np.ndarray, percentile: float, center_frac: float) -> f
     return float(np.percentile(pos, percentile))
 
 
+def _smooth_cube(cube: np.ndarray, sigma: float) -> np.ndarray:
+    if sigma <= 0.0:
+        return cube
+    from scipy.ndimage import gaussian_filter
+
+    return gaussian_filter(cube, sigma=sigma, mode="nearest")
+
+
+def _mesh_facecolors(verts: np.ndarray, faces: np.ndarray, boxlen: float, cmap) -> np.ndarray:
+    tri = verts[faces]
+    normals = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    normals /= np.maximum(np.linalg.norm(normals, axis=1)[:, None], 1.0e-30)
+    cent = tri.mean(axis=1)
+    depth = (0.58 * cent[:, 2] + 0.28 * cent[:, 0] - 0.14 * cent[:, 1]) / boxlen
+    depth = np.clip(depth, 0.0, 1.0)
+
+    from matplotlib.colors import LightSource
+
+    shade = LightSource(azdeg=320, altdeg=38).shade_normals(normals, fraction=0.8)
+    shade = 0.42 + 0.58 * np.clip(shade, 0.0, 1.0)
+    colors = cmap(0.16 + 0.72 * depth)
+    colors[:, :3] *= shade[:, None]
+    colors[:, 3] = 0.97
+    return colors
+
+
+def _clean_axes(ax, boxlen: float) -> None:
+    ticks = np.array([0.0, 0.5 * boxlen, boxlen])
+    ticklabels = [f"{t:.1f}" for t in ticks]
+    ax.set_xticks(ticks)
+    ax.set_yticks(ticks)
+    ax.set_zticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.set_yticklabels(ticklabels)
+    ax.set_zticklabels(ticklabels)
+    ax.tick_params(labelsize=7, colors="0.25", pad=0)
+    for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+        axis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
+        axis.pane.set_edgecolor((1.0, 1.0, 1.0, 0.0))
+        axis.line.set_color("0.25")
+    ax.grid(False)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run-dir", type=Path, required=True)
     ap.add_argument("--output-id", type=int, default=None)
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--isolevel", type=float, default=None)
-    ap.add_argument("--percentile", type=float, default=88.0)
+    ap.add_argument("--percentile", type=float, default=92.0)
     ap.add_argument("--grid", type=int, default=128)
     ap.add_argument("--center-frac", type=float, default=0.5)
+    ap.add_argument("--smooth-sigma", type=float, default=1.0)
     args = ap.parse_args()
 
     run_dir = args.run_dir.resolve()
@@ -92,7 +141,8 @@ def main() -> int:
     zmin = float(np.min(c.x[2] - c.dx / 2))
 
     cube = ram.mk_cube(c.x[0], c.x[1], c.x[2], c.dx, pmag)
-    cube = _resample_cube(cube, min(args.grid, cube.shape[0]))
+    cube = _resample_cube(cube, args.grid)
+    cube = _smooth_cube(cube, args.smooth_sigma)
 
     isolevel = args.isolevel
     if isolevel is None:
@@ -111,36 +161,38 @@ def main() -> int:
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-    fig = plt.figure(figsize=(8.0, 7.0))
+    fig = plt.figure(figsize=(7.2, 6.2), facecolor="white")
     ax = fig.add_subplot(111, projection="3d")
-    ax.plot_trisurf(
-        verts[:, 0],
-        verts[:, 1],
-        faces,
-        verts[:, 2],
-        color="#c44e52",
-        linewidth=0.0,
+    mesh = Poly3DCollection(
+        verts[faces],
+        facecolors=_mesh_facecolors(verts, faces, boxlen, plt.get_cmap("magma")),
+        edgecolors="none",
+        linewidths=0.0,
         antialiased=True,
-        alpha=0.92,
     )
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
+    ax.add_collection3d(mesh)
+    ax.set_xlabel(r"$x$ [code units]", labelpad=3, fontsize=9)
+    ax.set_ylabel(r"$y$ [code units]", labelpad=3, fontsize=9)
+    ax.set_zlabel(r"$z$ [code units]", labelpad=3, fontsize=9)
     ax.set_xlim(0.0, boxlen)
     ax.set_ylim(0.0, boxlen)
     ax.set_zlim(0.0, boxlen)
-    ax.set_title(f"Ponomarenko $B^2/2$ isosurface (output {nout:05d}, t={time:.3f})")
-    ax.view_init(elev=24, azim=-55)
-    ax.set_box_aspect((1.0, 1.0, 1.0))
+    ax.set_title(f"Ponomarenko magnetic pressure, $B^2/2$ (t={time:.3f})", pad=10, fontsize=13)
+    ax.view_init(elev=19, azim=-38)
+    ax.set_box_aspect((1.0, 1.0, 1.0), zoom=1.22)
+    ax.set_proj_type("persp", focal_length=0.9)
+    _clean_axes(ax, boxlen)
 
     out = args.out or (run_dir / f"pono_iso_magpressure_{nout:05d}.png")
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=150, bbox_inches="tight")
+    fig.savefig(out, dpi=300, bbox_inches="tight", pad_inches=0.04)
     plt.close(fig)
     print(
         f"wrote {out} (t={time:.6f}, isolevel={isolevel:.6g}, "
-        f"grid={ng}^3, verts={len(verts)}, faces={len(faces)})"
+        f"grid={ng}^3, smooth_sigma={args.smooth_sigma:g}, "
+        f"verts={len(verts)}, faces={len(faces)})"
     )
     return 0
 
