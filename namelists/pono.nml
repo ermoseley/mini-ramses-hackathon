@@ -12,6 +12,7 @@ verbose=.false.
 levelmin=5
 levelmax=8
 ngridmax=2100000
+ncachemax=200000
 nexpand=1
 boxlen=8.055
 /
