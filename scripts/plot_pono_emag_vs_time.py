@@ -21,7 +21,11 @@ def main() -> None:
         help="path to run.log (default: positional or required)",
     )
     parser.add_argument("--out", type=Path, default=None)
-    parser.add_argument("--logy", action="store_true")
+    parser.add_argument(
+        "--linear-y",
+        action="store_true",
+        help="linear y axis (default: log emag)",
+    )
     args = parser.parse_args()
     if args.run_log is None:
         parser.error("run_log path required")
@@ -37,7 +41,7 @@ def main() -> None:
     ax.set_ylabel("total magnetic energy (emag)")
     ax.set_title(f"Ponomarenko emag vs time ({run_log.parent.name})")
     ax.grid(True, alpha=0.3)
-    if args.logy:
+    if not args.linear_y:
         ax.set_yscale("log")
     fig.tight_layout()
     fig.savefig(out, dpi=150)
