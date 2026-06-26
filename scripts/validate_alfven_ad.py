@@ -153,7 +153,7 @@ def main() -> None:
     p.add_argument("--a0", type=float, default=0.01)
     p.add_argument("--bz", type=float, default=1.0)
     p.add_argument("--rho", type=float, default=1.0)
-    p.add_argument("--eta-ad", type=float, default=1.0)
+    p.add_argument("--eta-ad", type=float, default=0.1)
     p.add_argument("--boxlen", type=float, default=1.0)
     p.add_argument("--miniram", type=Path, default=Path.home() / "mini-ramses-dev")
     p.add_argument("--out", type=Path, default=None)

@@ -706,6 +706,22 @@ case "${cmd}" in
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-04:00:00}" ambigauss_gpu.slurm
     ;;
+  alfven-ad-alpha)
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ambi}"
+    alfven_nml="$(hackathon_nml alfven_ad.nml)"
+    export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+    export GPU_INIT=ALFVENAD GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export DMO_NO_DEFAULT_CAPS=1
+    export RKG_ALPHAS="${RKG_ALPHAS:-0.5 2 10}"
+    echo "== alfven-ad-alpha: RKG alpha sweep alphas=${RKG_ALPHAS} L${AMBI_LEVEL:-7} NPRE=${GPU_NPRE}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.alfvenad}" \
+    NML="${alfven_nml}" PROFILE=run \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-04:00:00}" alfven_ad_alpha_gpu.slurm
+    ;;
   alfven-ad)
     export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ambi}"
     alfven_nml="$(hackathon_nml alfven_ad.nml)"
