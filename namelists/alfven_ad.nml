@@ -25,7 +25,7 @@ C_ave=1.0
 
 &OUTPUT_PARAMS
 delta_tout=0.01
-tend=2.0
+tend=0.05
 /
 
 &HYDRO_PARAMS
@@ -36,7 +36,7 @@ riemann='llf'
 riemann2d='llf'
 induction=.false.
 etamag=0.0
-eta_ad=0.01
+eta_ad=1.0
 cp_ad=0.8
 /
 
