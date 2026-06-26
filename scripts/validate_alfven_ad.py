@@ -55,8 +55,8 @@ def profile_by(run_dir: Path, ram, nout: int, mid_frac: float = 0.5):
     return x[order], by[order], float(np.min(c.dx))
 
 
-def analytic_by(x: np.ndarray, t: float, b0: float, k: float, gamma: float) -> np.ndarray:
-    return b0 * np.sin(k * x) * math.exp(-gamma * t)
+def analytic_by(x: np.ndarray, t: float, b0: float, k: float, gamma: float, omega: float) -> np.ndarray:
+    return b0 * np.sin(k * x) * math.cos(omega * t) * math.exp(-gamma * t)
 
 
 def l1_l2(sim: np.ndarray, ref: np.ndarray) -> tuple[float, float]:
@@ -97,14 +97,15 @@ def plot_damping(
     amp: np.ndarray,
     a0: float,
     gamma: float,
+    omega: float,
     out: Path,
     label: str = "",
 ) -> None:
     import matplotlib.pyplot as plt
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    t_theory = np.linspace(0.0, float(t[-1]) if len(t) else 0.05, 200)
-    amp_theory = a0 * np.exp(-gamma * t_theory)
+    t_theory = np.linspace(0.0, float(t[-1]) if len(t) else 0.05, 800)
+    amp_theory = a0 * np.abs(np.cos(omega * t_theory)) * np.exp(-gamma * t_theory)
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label="simulation |B_y|_1")
     ax.plot(
@@ -113,7 +114,15 @@ def plot_damping(
         "--",
         lw=1.2,
         color="#d62728",
-        label=f"theory A0 exp(-gamma t), gamma={gamma:.4g}",
+        label=f"theory A0 |cos(omega t)| exp(-gamma t), omega={omega:.4g}, gamma={gamma:.4g}",
+    )
+    ax.plot(
+        t_theory,
+        a0 * np.exp(-gamma * t_theory),
+        ":",
+        lw=1.0,
+        color="#7f7f7f",
+        label="exp(-gamma t) envelope",
     )
     ax.set_xlabel("time")
     ax.set_ylabel(r"$|B_y|$ Fourier amplitude")
@@ -153,7 +162,7 @@ def main() -> None:
     p.add_argument("--a0", type=float, default=0.01)
     p.add_argument("--bz", type=float, default=1.0)
     p.add_argument("--rho", type=float, default=1.0)
-    p.add_argument("--eta-ad", type=float, default=0.1)
+    p.add_argument("--eta-ad", type=float, default=0.02)
     p.add_argument("--boxlen", type=float, default=1.0)
     p.add_argument("--miniram", type=Path, default=Path.home() / "mini-ramses-dev")
     p.add_argument("--out", type=Path, default=None)
@@ -169,16 +178,18 @@ def main() -> None:
 
     ram = import_miniramses(args.miniram)
     k, chi, gamma = theory_gamma(args.eta_ad, args.bz, args.boxlen, args.rho)
+    omega = k * args.bz / math.sqrt(args.rho)
 
     lines: list[str] = []
-    lines.append("Alfven wave ambipolar damping validation")
+    lines.append("Standing Alfven wave ambipolar damping validation")
     lines.append(
-        f"  B_y = {args.a0} sin(kx), v_y = -{args.a0} sin(kx), B_z = {args.bz}, rho = {args.rho}"
+        f"  B_y = {args.a0} sin(kx), v_y = 0, B_x = {args.bz}, rho = {args.rho}"
     )
     lines.append(f"  k = 2*pi/boxlen = {k:.6g}")
     lines.append(f"  chi = eta_ad*C_ave^2 = {chi:.6g}")
+    lines.append(f"  theory omega = k*B_x/sqrt(rho) = {omega:.6g}")
     lines.append(f"  theory gamma = chi*k^2/(2*rho) = {gamma:.6g}")
-    lines.append(f"  |B_y|(t) ~ {args.a0} exp(-gamma t)")
+    lines.append(f"  |B_y|(t) ~ {args.a0} |cos(omega t)| exp(-gamma t)")
     lines.append("")
 
     l1s: list[float] = []
@@ -194,7 +205,7 @@ def main() -> None:
         info = ram.rd_info(nout, path=str(run))
         t = float(info.texp)
         x, by, dx = profile_by(run, ram, nout)
-        ref = analytic_by(x, t, args.a0, k, gamma)
+        ref = analytic_by(x, t, args.a0, k, gamma, omega)
         l1, l2 = l1_l2(by, ref)
         l1s.append(l1)
         l2s.append(l2)
@@ -243,7 +254,7 @@ def main() -> None:
         if len(t_series) < 2:
             raise SystemExit(f"need >=2 outputs in {run} for --plot")
         plot_out = args.plot_out or (args.workdir / f"alfven_ad_damping_L{plot_lev}.png")
-        plot_damping(t_series, amp_series, args.a0, gamma, plot_out, label=f"L{plot_lev}")
+        plot_damping(t_series, amp_series, args.a0, gamma, omega, plot_out, label=f"L{plot_lev}")
 
 
 if __name__ == "__main__":

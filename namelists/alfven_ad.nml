@@ -1,5 +1,6 @@
-! Alfvén wave ambipolar damping: guide field B_x = C_ave, B_y = -A_ave sin(kx), v_y = -A_ave sin(kx).
-! Theory (linear, rho=1): amplitude ~ exp(-gamma t), gamma = eta_ad * k^2 * C_ave^2 / (2*rho).
+! Standing Alfvén wave with ambipolar damping: guide field B_x = C_ave, B_y = -A_ave sin(kx), v_y = 0.
+! Energy sloshes B<->v at omega = k*v_A = 2*pi*C_ave/sqrt(rho) ~ 6.283; |B_y| ~ |cos(omega t)| under an exp(-gamma t) envelope.
+! gamma = eta_ad * C_ave^2 * k^2 / (2*rho); eta_ad=0.02 => gamma ~ 0.395 (~2.5 periods per e-fold, ~10 oscillations by tend=10).
 ! make NDIM=3 MPI=1 HYDRO=1 MHD=1 INIT=ALFVENAD
 
 &RUN_PARAMS
@@ -37,7 +38,7 @@ riemann2d='hlld'
 slope_mag_type=2
 induction=.false.
 etamag=0.0
-eta_ad=0.1
+eta_ad=0.02
 cp_ad=0.8
 rkg_alpha=-1
 /
