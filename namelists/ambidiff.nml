@@ -1,0 +1,46 @@
+! Linear ambipolar diffusion: B_y = A_ave sin(2 pi x / boxlen), uniform B_z = C_ave.
+! Analytic decay (C_ave=1): B_y = A_ave sin(kx) exp(-eta_ad * k^2 * t), k = 2 pi / boxlen.
+! make NDIM=3 MPI=1 HYDRO=1 MHD=1 INIT=BDIFF
+
+&RUN_PARAMS
+hydro=.true.
+ncontrol=1
+nsubcycle=1,2
+verbose=.false.
+nsuperoct=0
+/
+
+&AMR_PARAMS
+levelmin=7
+levelmax=7
+ngridmax=80000
+nexpand=1
+boxlen=1.0
+/
+
+&INIT_PARAMS
+A_ave=0.01
+C_ave=1.0
+/
+
+&OUTPUT_PARAMS
+delta_tout=0.01
+tend=0.05
+/
+
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.5
+slope_type=2
+riemann='llf'
+riemann2d='llf'
+induction=.true.
+etamag=0.0
+eta_ad=0.01
+cp_ad=0.8
+/
+
+&REFINE_PARAMS
+interpol_var=0
+interpol_type=2
+/

@@ -23,6 +23,7 @@
 #   ./submit_profiles.sh orszag-tang      # 3D Orszag-Tang MHD vortex (orszag_tang.nml), GPU MHD=1 HLLD, 256^3 unigrid (z-symmetry)
 #   ./submit_profiles.sh ot-amr           # Orszag-Tang MHD AMR (orszag_tang_amr.nml), 32^3 base L5->L8, err_grad_p=0.15
 #   ./submit_profiles.sh ot-pscal         # ot-amr + one passive scalar (checkerboard ic_pvar_00001), NPSCAL=1
+#   ./submit_profiles.sh ot-sgs            # 256^3 Orszag-Tang + GPU SGS turbulence (NPSCAL=1, sgs_turb=.true.; gpu_sgs)
 #   ./submit_profiles.sh nsys-ot          # nsys profile of Orszag-Tang MHD vortex (128^3, NPRE=8, 5 timesteps)
 #   ./submit_profiles.sh nsys-dust        # nsys: 256^3 decaying MHD turb + dust, 1 grain/cell, 10 steps
 #   ./submit_profiles.sh nsys-dust-12     # nsys: same with 12 grains/cell
@@ -675,6 +676,21 @@ case "${cmd}" in
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-06:00:00}" dmo_gpu.slurm
     ;;
+  ambi-diff)
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ambi}"
+    ambi_nml="$(hackathon_nml ambidiff.nml)"
+    export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+    export GPU_INIT=BDIFF GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export DMO_NO_DEFAULT_CAPS=1
+    echo "== ambi-diff: linear B_y sin(kx) ambipolar decay, levels=${AMBI_LEVELS:-6 7 8 9} NPRE=${GPU_NPRE}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambi}" \
+    NML="${ambi_nml}" PROFILE=run \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" ambidiff_gpu.slurm
+    ;;
   pono)
     export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ohm}"
     pono_nml="$(hackathon_nml pono.nml)"
@@ -1010,6 +1026,41 @@ case "${cmd}" in
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-00:05:00}" dmo_gpu.slurm
     ;;
+  ot-sgs)
+    # Orszag-Tang MHD vortex with GPU subgrid-scale turbulence (orszag_tang_sgs.nml).
+    # 256^3 unigrid (level 8), sgs_turb=.true., NPSCAL=1 -> NVAR=6 (iturb=6).
+    # Requires gpu_sgs branch (gpu/gpu_sgs.cuf) and harness Makefile.a100 gpu_sgs.o wiring.
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_sgs}"
+    ot_level="${ORSZAG_TANG_LEVEL:-8}"
+    hackathon_ensure_orszag_tang_ics "${ot_level}"
+    ot_nml="$(hackathon_nml orszag_tang_sgs.nml)"
+    if [[ "${ot_level}" != "8" ]]; then
+      ot_nml="${HARNESS}/namelists/orszag_tang_sgs_l${ot_level}.nml"
+      sed -E "s/^[[:space:]]*levelmin=.*/ levelmin=${ot_level}/; s/^[[:space:]]*levelmax=.*/ levelmax=${ot_level}/" \
+        "$(hackathon_nml orszag_tang_sgs.nml)" > "${ot_nml}"
+    fi
+    export GPU_HYDRO=1
+    export GPU_MHD=1
+    export GPU_NPSCAL=1
+    export GPU_GRAV=0
+    export GPU_UNITS=
+    export GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export IC_DIR
+    export DMO_TEND="${DMO_TEND:-0.5}"
+    export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"
+    export DMO_NSTEPMAX="${DMO_NSTEPMAX:-10000}"
+    echo "== ot-sgs: level=${ot_level} ($((2**ot_level))^3 unigrid) sgs_turb=.true. NVAR=$((5+GPU_NPSCAL)) NPRE=${GPU_NPRE} GRAV=0 riemann=hlld"
+    echo "           IC_DIR=${IC_DIR} NML=${ot_nml} BUILD_BINARIES=${BUILD_BINARIES:-1} wall=${DMO_SLURM_TIME:-02:00:00} mem=${DMO_SLURM_MEM:-80G}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    GPU_KICK_COOP_GATHER="${GPU_KICK_COOP_GATHER:-0}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.sgs}" \
+    NML="${ot_nml}" PROFILE=run \
+    DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}" \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-02:00:00}" --mem="${DMO_SLURM_MEM:-80G}" dmo_gpu.slurm
+    ;;
   nsys-ot)
     # Nsight Systems profile of the Orszag-Tang MHD vortex (same build/ICs as
     # orszag-tang), capped at 5 coarse timesteps for a short MHD integrator trace.
@@ -1264,6 +1315,7 @@ Hackathon profile launcher (run from ${HARNESS})
   ./submit_profiles.sh orszag-tang      orszag_tang.nml 3D Orszag-Tang MHD vortex GPU (MHD=1, HLLD, 256^3 unigrid; auto ICs)
   ./submit_profiles.sh ot-amr           orszag_tang_amr.nml Orszag-Tang MHD AMR GPU (32^3 base L5->L8, err_grad_p=0.15; auto ICs)
   ./submit_profiles.sh ot-pscal         orszag_tang_amr_pscal.nml ot-amr + checkerboard passive scalar (NPSCAL=1; auto ICs)
+  ./submit_profiles.sh ot-sgs           orszag_tang_sgs.nml 256^3 Orszag-Tang + GPU SGS turbulence (NPSCAL=1, sgs_turb; gpu_sgs branch)
   ./submit_profiles.sh ot-cpu           orszag_tang_amr.nml Orszag-Tang MHD AMR CPU (L5->L10, NPRE=8, 80G, 24h; auto ICs)
   ./submit_profiles.sh nsys-ot          nsys profile of Orszag-Tang MHD vortex (128^3, NPRE=8, 5 timesteps; auto ICs)
   ./submit_profiles.sh nsys-oth         nsys profile of Orszag-Tang hydro-only (128^3, NPRE=8, 5 timesteps; MHD=0)
