@@ -686,7 +686,7 @@ case "${cmd}" in
     GPU_DEBUG="${GPU_DEBUG:-0}" \
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \
-    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambi}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambidiff}" \
     NML="${ambi_nml}" PROFILE=run \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" ambidiff_gpu.slurm
@@ -701,7 +701,7 @@ case "${cmd}" in
     GPU_DEBUG="${GPU_DEBUG:-0}" \
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \
-    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambi}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambigauss}" \
     NML="${ambi_nml}" PROFILE=run \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" ambigauss_gpu.slurm
@@ -716,7 +716,7 @@ case "${cmd}" in
     GPU_DEBUG="${GPU_DEBUG:-0}" \
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \
-    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambi}" \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.alfvenad}" \
     NML="${alfven_nml}" PROFILE=run \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" alfven_ad_gpu.slurm

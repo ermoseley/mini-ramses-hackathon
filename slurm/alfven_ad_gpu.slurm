@@ -16,7 +16,7 @@ NML="${NML:-${HARNESS_DIR}/namelists/alfven_ad.nml}"
 BUILD_BINARIES="${BUILD_BINARIES:-1}"
 export MINIRAM GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL=0 GPU_GRAV=0 GPU_UNITS=
 export GPU_INIT="${GPU_INIT:-ALFVENAD}"
-export BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambi}"
+export BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.alfvenad}"
 export GPU_DEBUG="${GPU_DEBUG:-0}"
 export DMO_NO_DEFAULT_CAPS=1
 export DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}"
