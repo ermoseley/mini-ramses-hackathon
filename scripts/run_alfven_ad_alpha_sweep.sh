@@ -9,7 +9,7 @@ BIN="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.alfvenad}"
 TEMPLATE_NML="${AMBI_NML:-${HARNESS}/namelists/alfven_ad.nml}"
 WORKDIR="${1:-${RUN_DIR:-${PWD}/alfven_ad_alpha_sweep}}"
 LEVEL="${AMBI_LEVEL:-7}"
-ALPHAS="${RKG_ALPHAS:-0.5 2 10}"
+ALPHAS="${RKG_ALPHAS:-0.5 10}"
 _nml_val() { grep -E "^[[:space:]]*${1}=" "${2}" | head -1 | sed -E "s/.*${1}=//; s/[[:space:]].*//"; }
 TEND="${AMBI_TEND:-$(_nml_val tend "${TEMPLATE_NML}")}"
 A_0="${AMBI_A_0:-$(_nml_val A_ave "${TEMPLATE_NML}")}"

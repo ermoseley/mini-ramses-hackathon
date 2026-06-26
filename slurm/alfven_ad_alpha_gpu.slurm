@@ -20,7 +20,7 @@ export BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.alfvenad}"
 export GPU_DEBUG="${GPU_DEBUG:-0}"
 export DMO_NO_DEFAULT_CAPS=1
 export DMO_GPU_LAUNCH_BLOCKING="${DMO_GPU_LAUNCH_BLOCKING:-1}"
-export RKG_ALPHAS="${RKG_ALPHAS:-0.5 2 10}"
+export RKG_ALPHAS="${RKG_ALPHAS:-0.5 10}"
 
 workdir="${RUN_DIR}/alfven_ad_alpha_${SLURM_JOB_ID:-manual}"
 mkdir -p "${workdir}"
