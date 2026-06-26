@@ -691,6 +691,36 @@ case "${cmd}" in
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
       hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" ambidiff_gpu.slurm
     ;;
+  ambi-gauss)
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ambi}"
+    ambi_nml="$(hackathon_nml ambigauss.nml)"
+    export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+    export GPU_INIT=BGAUSS GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export DMO_NO_DEFAULT_CAPS=1
+    echo "== ambi-gauss: Gaussian B_y ambipolar diffusion, levels=${AMBI_LEVELS:-6 7 8 9} NPRE=${GPU_NPRE}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambi}" \
+    NML="${ambi_nml}" PROFILE=run \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" ambigauss_gpu.slurm
+    ;;
+  alfven-ad)
+    export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ambi}"
+    alfven_nml="$(hackathon_nml alfven_ad.nml)"
+    export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
+    export GPU_INIT=ALFVENAD GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    export DMO_NO_DEFAULT_CAPS=1
+    echo "== alfven-ad: Alfvén wave ambipolar damping, levels=${AMBI_LEVELS:-6 7 8 9} NPRE=${GPU_NPRE}"
+    GPU_DEBUG="${GPU_DEBUG:-0}" \
+    GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
+    GPU_PAPER=0 \
+    BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambi}" \
+    NML="${alfven_nml}" PROFILE=run \
+    BUILD_BINARIES="${BUILD_BINARIES:-1}" \
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" alfven_ad_gpu.slurm
+    ;;
   pono)
     export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ohm}"
     pono_nml="$(hackathon_nml pono.nml)"
