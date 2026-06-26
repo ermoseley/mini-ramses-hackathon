@@ -1,4 +1,4 @@
-! Alfvén wave ambipolar damping: B_y = A_ave sin(kx), v_y = -A_ave sin(kx), B_z = C_ave.
+! Alfvén wave ambipolar damping: guide field B_x = C_ave, B_y = -A_ave sin(kx), v_y = -A_ave sin(kx).
 ! Theory (linear, rho=1): amplitude ~ exp(-gamma t), gamma = eta_ad * k^2 * C_ave^2 / (2*rho).
 ! make NDIM=3 MPI=1 HYDRO=1 MHD=1 INIT=ALFVENAD
 
@@ -25,7 +25,7 @@ C_ave=1.0
 
 &OUTPUT_PARAMS
 delta_tout=0.01
-tend=0.05
+tend=0.1
 /
 
 &HYDRO_PARAMS
