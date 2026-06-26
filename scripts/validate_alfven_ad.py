@@ -29,9 +29,9 @@ def output_numbers(run_dir: Path) -> list[int]:
     return sorted(int(p.name.split("_")[-1]) for p in run_dir.glob("output_*"))
 
 
-def theory_gamma(eta_ad: float, bz: float, boxlen: float, rho: float = 1.0) -> tuple[float, float, float]:
+def theory_gamma(eta_ad: float, bx: float, boxlen: float, rho: float = 1.0) -> tuple[float, float, float]:
     k = 2.0 * math.pi / boxlen
-    chi = eta_ad * bz * bz
+    chi = eta_ad * bx * bx
     gamma = chi * k * k / (2.0 * rho)
     return k, chi, gamma
 
@@ -79,17 +79,21 @@ def fit_bperp_amplitude(x: np.ndarray, by: np.ndarray, bz: np.ndarray, k: float)
 
 def amplitude_series(
     run_dir: Path, ram, k: float, mid_frac: float = 0.5
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     times: list[float] = []
+    by_modes: list[float] = []
+    bz_modes: list[float] = []
     amps: list[float] = []
     for nout in output_numbers(run_dir):
         info = ram.rd_info(nout, path=str(run_dir))
         x, by, bz, _ = profile_bperp(run_dir, ram, nout, mid_frac)
         times.append(float(info.texp))
-        amps.append(fit_bperp_amplitude(x, by, bz, k))
+        by_modes.append(sin_coeff(x, by, k))
+        bz_modes.append(sin_coeff(x, bz, k))
+        amps.append(math.hypot(by_modes[-1], bz_modes[-1]))
     if not times:
-        return np.array([]), np.array([])
-    return np.array(times), np.array(amps)
+        return np.array([]), np.array([]), np.array([]), np.array([])
+    return np.array(times), np.array(by_modes), np.array(bz_modes), np.array(amps)
 
 
 def plot_damping(
@@ -106,7 +110,7 @@ def plot_damping(
     out.parent.mkdir(parents=True, exist_ok=True)
     t_theory = np.linspace(0.0, float(t[-1]) if len(t) else 0.05, 800)
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label=r"simulation $|B_\perp|$ amplitude")
+    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label=r"simulation $|B_\perp|$ envelope")
     ax.plot(
         t_theory,
         a0 * np.exp(-gamma * t_theory),
@@ -132,7 +136,6 @@ def plot_bperp_profiles(
     run_dir: Path,
     ram,
     a0: float,
-    bz0: float,
     k: float,
     gamma: float,
     out: Path,
@@ -151,7 +154,7 @@ def plot_bperp_profiles(
         info = ram.rd_info(nout, path=str(run_dir))
         t = float(info.texp)
         x, by, bz, _ = profile_bperp(run_dir, ram, nout)
-        bperp = np.hypot(by, bz - bz0)
+        bperp = np.hypot(by, bz)
         color = cmap(j / max(1, nframes - 1))
         ax.plot(x, bperp, lw=1.1, color=color, label=f"t={t:.2f}")
         ax.plot(x, analytic_bperp(x, a0, k, gamma, t), ":", lw=1.0, color=color)
@@ -188,7 +191,7 @@ def main() -> None:
     p.add_argument("--workdir", type=Path, required=True)
     p.add_argument("--levels", type=int, nargs="+", default=[6, 7, 8, 9])
     p.add_argument("--a0", type=float, default=0.01)
-    p.add_argument("--bz", type=float, default=1.0)
+    p.add_argument("--bz", type=float, default=1.0, help="guide-field B_x (legacy option name)")
     p.add_argument("--rho", type=float, default=1.0)
     p.add_argument("--eta-ad", type=float, default=0.1)
     p.add_argument("--boxlen", type=float, default=1.0)
@@ -211,7 +214,8 @@ def main() -> None:
     lines: list[str] = []
     lines.append("Circularly polarized standing Alfven wave ambipolar damping validation")
     lines.append(
-        f"  B_y = -{args.a0} sin(kx), v_z = -{args.a0} cos(kx), B_x = {args.bz}, rho = {args.rho}"
+        f"  t=0: B_y = -{args.a0}/sqrt(2) sin(kx), B_z = +{args.a0}/sqrt(2) sin(kx), "
+        f"v_y = v_z = -{args.a0}/sqrt(2) cos(kx), B_x = {args.bz}, rho = {args.rho}"
     )
     lines.append(f"  |B_perp|(x,t) = {args.a0} |sin(kx)| exp(-gamma t)  (fixed pattern, rotating field)")
     lines.append(f"  k = 2*pi/boxlen = {k:.6g}")
@@ -233,7 +237,7 @@ def main() -> None:
         info = ram.rd_info(nout, path=str(run))
         t = float(info.texp)
         x, by, bz, dx = profile_bperp(run, ram, nout)
-        bperp = np.hypot(by, bz - args.bz)
+        bperp = np.hypot(by, bz)
         ref = analytic_bperp(x, args.a0, k, gamma, t)
         l1, l2 = l1_l2(bperp, ref)
         l1s.append(l1)
@@ -246,12 +250,23 @@ def main() -> None:
             f"|B_perp|_fit={amp:.3e}  |B_perp|_theory={amp0:.3e}  ncell={len(x)}"
         )
 
-        t_series, amp_series = amplitude_series(run, ram, k)
+        t_series, by_series, bz_series, amp_series = amplitude_series(run, ram, k)
         rate = fit_decay_rate(t_series, amp_series)
         if rate is not None:
             lines.append(
-                f"       |B_y| Fourier decay (fitted) = {rate:.6g}  "
+                f"       |B_perp| envelope decay (fitted) = {rate:.6g}  "
                 f"(theory gamma = {gamma:.6g}, ratio = {rate / gamma:.3f})"
+            )
+        if len(amp_series) >= 2:
+            tol = max(1.0e-12, 1.0e-4 * args.a0)
+            monotonic = bool(np.all(np.diff(amp_series) <= tol))
+            by0 = abs(float(by_series[0]))
+            bz0 = abs(float(bz_series[0]))
+            ratio = by0 / bz0 if bz0 > 0 else math.inf
+            lines.append(
+                f"       envelope monotonic = {monotonic}  "
+                f"initial |B_y|_mode={by0:.3e}  "
+                f"initial |B_z|_mode={bz0:.3e}  ratio={ratio:.3f}"
             )
         lines.append("")
 
@@ -279,13 +294,13 @@ def main() -> None:
                 raise SystemExit(f"no runs with outputs under {args.workdir}")
             plot_lev = max(avail)
         run = args.workdir / f"L{plot_lev}"
-        t_series, amp_series = amplitude_series(run, ram, k)
+        t_series, _, _, amp_series = amplitude_series(run, ram, k)
         if len(t_series) < 2:
             raise SystemExit(f"need >=2 outputs in {run} for --plot")
         plot_out = args.plot_out or (args.workdir / f"alfven_ad_damping_L{plot_lev}.png")
         plot_damping(t_series, amp_series, args.a0, gamma, omega, plot_out, label=f"L{plot_lev}")
         plot_bperp_profiles(
-            run, ram, args.a0, args.bz, k, gamma,
+            run, ram, args.a0, k, gamma,
             plot_out.with_name(plot_out.stem + "_profiles.png"),
         )
 

@@ -1,5 +1,6 @@
 ! Circularly polarized standing Alfvén wave with ambipolar damping: guide B_x = C_ave (parallel to k),
-! B_y = -A_ave sin(kx), v_z = -A_ave cos(kx) at t=0. The transverse field rotates in time so that
+! B_y = -A_ave/sqrt(2) sin(kx), B_z = +A_ave/sqrt(2) sin(kx), v_y = v_z = -A_ave/sqrt(2) cos(kx) at t=0.
+! The transverse field rotates in time so that
 ! |B_perp| = A_ave |sin(kx)| is a FIXED spatial pattern decaying monotonically as exp(-gamma t).
 ! gamma = eta_ad * C_ave^2 * k^2 / (2*rho); eta_ad=0.1 => gamma ~ 1.974, omega = k*C_ave/sqrt(rho) ~ 6.283 (~2 periods by tend=2).
 ! make NDIM=3 MPI=1 HYDRO=1 MHD=1 INIT=ALFVENAD
