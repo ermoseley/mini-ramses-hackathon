@@ -36,7 +36,7 @@ def theory_gamma(eta_ad: float, bz: float, boxlen: float, rho: float = 1.0) -> t
     return k, chi, gamma
 
 
-def profile_by(run_dir: Path, ram, nout: int, mid_frac: float = 0.5):
+def profile_bperp(run_dir: Path, ram, nout: int, mid_frac: float = 0.5):
     c = ram.rd_cell(nout, path=str(run_dir))
     ndim = c.ndim
     if ndim == 1:
@@ -51,12 +51,13 @@ def profile_by(run_dir: Path, ram, nout: int, mid_frac: float = 0.5):
         )
     x = c.x[0][mask]
     by = c.u[6][mask]
+    bz = c.u[7][mask]
     order = np.argsort(x)
-    return x[order], by[order], float(np.min(c.dx))
+    return x[order], by[order], bz[order], float(np.min(c.dx))
 
 
-def analytic_by(x: np.ndarray, t: float, b0: float, k: float, gamma: float, omega: float) -> np.ndarray:
-    return b0 * np.sin(k * x) * math.cos(omega * t) * math.exp(-gamma * t)
+def analytic_bperp(x: np.ndarray, b0: float, k: float, gamma: float, t: float) -> np.ndarray:
+    return b0 * np.abs(np.sin(k * x)) * math.exp(-gamma * t)
 
 
 def l1_l2(sim: np.ndarray, ref: np.ndarray) -> tuple[float, float]:
@@ -64,17 +65,16 @@ def l1_l2(sim: np.ndarray, ref: np.ndarray) -> tuple[float, float]:
     return float(np.mean(np.abs(err))), float(np.sqrt(np.mean(err * err)))
 
 
-def fit_by_amplitude(x: np.ndarray, by: np.ndarray, k: float | None = None) -> float:
-    if k is None:
-        k = 2.0 * math.pi
-        boxlen = float(np.max(x) - np.min(x))
-        if boxlen > 0:
-            k = 2.0 * math.pi / boxlen
+def sin_coeff(x: np.ndarray, f: np.ndarray, k: float) -> float:
     s = np.sin(k * x)
     denom = float(np.sum(s * s))
     if denom <= 0:
         return 0.0
-    return float(np.sum(by * s) / denom)
+    return float(np.sum(f * s) / denom)
+
+
+def fit_bperp_amplitude(x: np.ndarray, by: np.ndarray, bz: np.ndarray, k: float) -> float:
+    return math.hypot(sin_coeff(x, by, k), sin_coeff(x, bz, k))
 
 
 def amplitude_series(
@@ -84,9 +84,9 @@ def amplitude_series(
     amps: list[float] = []
     for nout in output_numbers(run_dir):
         info = ram.rd_info(nout, path=str(run_dir))
-        x, by, _ = profile_by(run_dir, ram, nout, mid_frac)
+        x, by, bz, _ = profile_bperp(run_dir, ram, nout, mid_frac)
         times.append(float(info.texp))
-        amps.append(abs(fit_by_amplitude(x, by, k)))
+        amps.append(fit_bperp_amplitude(x, by, bz, k))
     if not times:
         return np.array([]), np.array([])
     return np.array(times), np.array(amps)
@@ -105,28 +105,19 @@ def plot_damping(
 
     out.parent.mkdir(parents=True, exist_ok=True)
     t_theory = np.linspace(0.0, float(t[-1]) if len(t) else 0.05, 800)
-    amp_theory = a0 * np.abs(np.cos(omega * t_theory)) * np.exp(-gamma * t_theory)
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label="simulation |B_y|_1")
-    ax.plot(
-        t_theory,
-        amp_theory,
-        "--",
-        lw=1.2,
-        color="#d62728",
-        label=f"theory A0 |cos(omega t)| exp(-gamma t), omega={omega:.4g}, gamma={gamma:.4g}",
-    )
+    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label=r"simulation $|B_\perp|$ amplitude")
     ax.plot(
         t_theory,
         a0 * np.exp(-gamma * t_theory),
-        ":",
-        lw=1.0,
-        color="#7f7f7f",
-        label="exp(-gamma t) envelope",
+        "--",
+        lw=1.2,
+        color="#d62728",
+        label=f"theory A0 exp(-gamma t), gamma={gamma:.4g}",
     )
     ax.set_xlabel("time")
-    ax.set_ylabel(r"$|B_y|$ Fourier amplitude")
-    title = "Alfvén wave ambipolar damping"
+    ax.set_ylabel(r"$|B_\perp|$ Fourier amplitude")
+    title = "Circularly polarized standing Alfvén wave: ambipolar damping"
     if label:
         title = f"{title} ({label})"
     ax.set_title(title)
@@ -135,6 +126,43 @@ def plot_damping(
     fig.tight_layout()
     fig.savefig(out, dpi=150)
     print(f"wrote {out} ({len(t)} points)")
+
+
+def plot_bperp_profiles(
+    run_dir: Path,
+    ram,
+    a0: float,
+    bz0: float,
+    k: float,
+    gamma: float,
+    out: Path,
+    nframes: int = 5,
+) -> None:
+    import matplotlib.pyplot as plt
+
+    outs = output_numbers(run_dir)
+    if not outs:
+        return
+    picks = [outs[int(round(i * (len(outs) - 1) / (nframes - 1)))] for i in range(nframes)]
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    cmap = plt.get_cmap("viridis")
+    for j, nout in enumerate(picks):
+        info = ram.rd_info(nout, path=str(run_dir))
+        t = float(info.texp)
+        x, by, bz, _ = profile_bperp(run_dir, ram, nout)
+        bperp = np.hypot(by, bz - bz0)
+        color = cmap(j / max(1, nframes - 1))
+        ax.plot(x, bperp, lw=1.1, color=color, label=f"t={t:.2f}")
+        ax.plot(x, analytic_bperp(x, a0, k, gamma, t), ":", lw=1.0, color=color)
+    ax.set_xlabel("x")
+    ax.set_ylabel(r"$|B_\perp|(x)$")
+    ax.set_title(r"Fixed $|B_\perp|=A_0|\sin(kx)|$ pattern decaying (dotted: theory)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="upper right", fontsize=8, ncol=2)
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+    print(f"wrote {out}")
 
 
 def fit_decay_rate(t: np.ndarray, amp: np.ndarray) -> float | None:
@@ -162,7 +190,7 @@ def main() -> None:
     p.add_argument("--a0", type=float, default=0.01)
     p.add_argument("--bz", type=float, default=1.0)
     p.add_argument("--rho", type=float, default=1.0)
-    p.add_argument("--eta-ad", type=float, default=0.02)
+    p.add_argument("--eta-ad", type=float, default=0.1)
     p.add_argument("--boxlen", type=float, default=1.0)
     p.add_argument("--miniram", type=Path, default=Path.home() / "mini-ramses-dev")
     p.add_argument("--out", type=Path, default=None)
@@ -181,15 +209,15 @@ def main() -> None:
     omega = k * args.bz / math.sqrt(args.rho)
 
     lines: list[str] = []
-    lines.append("Standing Alfven wave ambipolar damping validation")
+    lines.append("Circularly polarized standing Alfven wave ambipolar damping validation")
     lines.append(
-        f"  B_y = {args.a0} sin(kx), v_y = 0, B_x = {args.bz}, rho = {args.rho}"
+        f"  B_y = -{args.a0} sin(kx), v_z = -{args.a0} cos(kx), B_x = {args.bz}, rho = {args.rho}"
     )
+    lines.append(f"  |B_perp|(x,t) = {args.a0} |sin(kx)| exp(-gamma t)  (fixed pattern, rotating field)")
     lines.append(f"  k = 2*pi/boxlen = {k:.6g}")
     lines.append(f"  chi = eta_ad*C_ave^2 = {chi:.6g}")
     lines.append(f"  theory omega = k*B_x/sqrt(rho) = {omega:.6g}")
     lines.append(f"  theory gamma = chi*k^2/(2*rho) = {gamma:.6g}")
-    lines.append(f"  |B_y|(t) ~ {args.a0} |cos(omega t)| exp(-gamma t)")
     lines.append("")
 
     l1s: list[float] = []
@@ -204,17 +232,18 @@ def main() -> None:
         nout = latest_output(run)
         info = ram.rd_info(nout, path=str(run))
         t = float(info.texp)
-        x, by, dx = profile_by(run, ram, nout)
-        ref = analytic_by(x, t, args.a0, k, gamma, omega)
-        l1, l2 = l1_l2(by, ref)
+        x, by, bz, dx = profile_bperp(run, ram, nout)
+        bperp = np.hypot(by, bz - args.bz)
+        ref = analytic_bperp(x, args.a0, k, gamma, t)
+        l1, l2 = l1_l2(bperp, ref)
         l1s.append(l1)
         l2s.append(l2)
         dxs.append(dx)
-        amp = abs(fit_by_amplitude(x, by, k))
-        amp0 = abs(fit_by_amplitude(x, ref, k))
+        amp = fit_bperp_amplitude(x, by, bz, k)
+        amp0 = args.a0 * math.exp(-gamma * t)
         lines.append(
             f"L{lev}  t={t:.5g}  dx={dx:.3e}  L1={l1:.3e}  L2={l2:.3e}  "
-            f"|B_y|_fit={amp:.3e}  |B_y|_theory={amp0:.3e}  ncell={len(x)}"
+            f"|B_perp|_fit={amp:.3e}  |B_perp|_theory={amp0:.3e}  ncell={len(x)}"
         )
 
         t_series, amp_series = amplitude_series(run, ram, k)
@@ -255,6 +284,10 @@ def main() -> None:
             raise SystemExit(f"need >=2 outputs in {run} for --plot")
         plot_out = args.plot_out or (args.workdir / f"alfven_ad_damping_L{plot_lev}.png")
         plot_damping(t_series, amp_series, args.a0, gamma, omega, plot_out, label=f"L{plot_lev}")
+        plot_bperp_profiles(
+            run, ram, args.a0, args.bz, k, gamma,
+            plot_out.with_name(plot_out.stem + "_profiles.png"),
+        )
 
 
 if __name__ == "__main__":
