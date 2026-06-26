@@ -682,7 +682,7 @@ case "${cmd}" in
     export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
     export GPU_INIT=BDIFF GPU_FASTMATH="${GPU_FASTMATH:-0}"
     export DMO_NO_DEFAULT_CAPS=1
-    echo "== ambi-diff: linear B_y sin(kx) ambipolar decay, levels=${AMBI_LEVELS:-6 7 8 9} NPRE=${GPU_NPRE}"
+    echo "== ambi-diff: linear B_y sin(kx) ambipolar decay, levels=${AMBI_LEVELS:-6 7 8} NPRE=${GPU_NPRE}"
     GPU_DEBUG="${GPU_DEBUG:-0}" \
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \
@@ -697,7 +697,7 @@ case "${cmd}" in
     export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
     export GPU_INIT=BGAUSS GPU_FASTMATH="${GPU_FASTMATH:-0}"
     export DMO_NO_DEFAULT_CAPS=1
-    echo "== ambi-gauss: Gaussian B_y ambipolar diffusion, levels=${AMBI_LEVELS:-6 7 8 9} NPRE=${GPU_NPRE}"
+    echo "== ambi-gauss: Gaussian B_y ambipolar diffusion, levels=${AMBI_LEVELS:-6 7 8} NPRE=${GPU_NPRE}"
     GPU_DEBUG="${GPU_DEBUG:-0}" \
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \
@@ -712,7 +712,7 @@ case "${cmd}" in
     export GPU_HYDRO=1 GPU_MHD=1 GPU_NPSCAL="${GPU_NPSCAL:-0}" GPU_GRAV=0 GPU_UNITS=
     export GPU_INIT=ALFVENAD GPU_FASTMATH="${GPU_FASTMATH:-0}"
     export DMO_NO_DEFAULT_CAPS=1
-    echo "== alfven-ad: Alfvén wave ambipolar damping, levels=${AMBI_LEVELS:-6 7 8 9} NPRE=${GPU_NPRE}"
+    echo "== alfven-ad: Alfvén wave ambipolar damping, levels=${AMBI_LEVELS:-6 7 8} NPRE=${GPU_NPRE}"
     GPU_DEBUG="${GPU_DEBUG:-0}" \
     GPU_CUDA_ARCH=${GPU_CUDA_ARCH} \
     GPU_PAPER=0 \

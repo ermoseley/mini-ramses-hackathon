@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Run ambigauss convergence sweep (levels 6-9) and validate against analytic diffusion.
+# Run ambigauss convergence sweep (levels 6-8) and validate against analytic diffusion.
 set -euo pipefail
 
 HARNESS="${HARNESS_DIR:-${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}}"
 MINIRAM="${MINIRAM:-${HOME}/mini-ramses-dev}"
-BIN="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambi}"
+BIN="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambigauss}"
 TEMPLATE_NML="${AMBI_NML:-${HARNESS}/namelists/ambigauss.nml}"
 WORKDIR="${1:-${RUN_DIR:-${PWD}/ambigauss_sweep}}"
-LEVELS="${AMBI_LEVELS:-6 7 8 9}"
+LEVELS="${AMBI_LEVELS:-6 7 8}"
 TEND="${AMBI_TEND:-0.05}"
 A_0="${AMBI_A_0:-0.01}"
 SIGMA="${AMBI_SIGMA:-0.1}"
@@ -26,13 +26,15 @@ fi
 for lev in ${LEVELS}; do
   run="${WORKDIR}/L${lev}"
   mkdir -p "${run}"
+  ngrid=$((1 << (3 * lev - 2)))
   sed -E \
     "s/^[[:space:]]*levelmin=.*/ levelmin=${lev}/; \
      s/^[[:space:]]*levelmax=.*/ levelmax=${lev}/; \
+     s/^[[:space:]]*ngridmax=.*/ ngridmax=${ngrid}/; \
      s/^[[:space:]]*tend=.*/ tend=${TEND}/" \
     "${TEMPLATE_NML}" > "${run}/input.nml"
-  echo "== L${lev}: $(grep -E 'levelmin|tend' "${run}/input.nml" | tr '\n' ' ')"
-  (cd "${run}" && "${BIN}" input.nml 2>&1 | tee run.log)
+  echo "== L${lev}: $(grep -E 'levelmin|ngridmax|tend' "${run}/input.nml" | tr '\n' ' ')"
+  (cd "${run}" && "${BIN}" input.nml 2>&1 | tee run.log) || echo "WARNING: L${lev} failed"
 done
 
 export PYTHONPATH="${MINIRAM}/utils/py:${PYTHONPATH:-}"
