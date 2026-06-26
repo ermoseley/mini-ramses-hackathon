@@ -4,6 +4,7 @@ set -euo pipefail
 
 HARNESS="${HARNESS_DIR:-${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}}"
 MINIRAM="${MINIRAM:-${HOME}/mini-ramses-dev}"
+MINIRAM_PY="${MINIRAM_PY:-${HOME}/mini-ramses-dev}"
 BIN="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.alfvenad}"
 TEMPLATE_NML="${AMBI_NML:-${HARNESS}/namelists/alfven_ad.nml}"
 WORKDIR="${1:-${RUN_DIR:-${PWD}/alfven_ad_sweep}}"
@@ -36,11 +37,13 @@ for lev in ${LEVELS}; do
   (cd "${run}" && "${BIN}" input.nml 2>&1 | tee run.log) || echo "WARNING: L${lev} failed"
 done
 
-export PYTHONPATH="${MINIRAM}/utils/py:${PYTHONPATH:-}"
+export PYTHONPATH="${MINIRAM_PY}/utils/py:${PYTHONPATH:-}"
 python3 "${HARNESS}/scripts/validate_alfven_ad.py" \
   --workdir "${WORKDIR}" \
   --levels ${LEVELS} \
   --a0 "${A_0}" --bz "${B_Z}" --eta-ad "${ETA_AD}" --boxlen "${BOXLEN}" \
-  --out "${WORKDIR}/alfven_ad_report.txt"
+  --miniram "${MINIRAM_PY}" \
+  --out "${WORKDIR}/alfven_ad_report.txt" \
+  --plot --plot-out "${WORKDIR}/alfven_ad_damping.png"
 
 cat "${WORKDIR}/alfven_ad_report.txt"
