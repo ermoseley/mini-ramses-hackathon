@@ -25,7 +25,7 @@ C_ave=1.0
 
 &OUTPUT_PARAMS
 delta_tout=0.01
-tend=0.05
+tend=2.0
 /
 
 &HYDRO_PARAMS
