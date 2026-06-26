@@ -30,9 +30,9 @@ tend=10.0
 
 &HYDRO_PARAMS
 gamma=1.6666667
-courant_factor=0.1
+courant_factor=0.8
 slope_type=2
-riemann='llf'
+riemann='hlld'
 riemann2d='llf'
 induction=.false.
 etamag=0.0
