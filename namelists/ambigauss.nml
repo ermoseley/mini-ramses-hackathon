@@ -32,7 +32,7 @@ tend=0.05
 
 &HYDRO_PARAMS
 gamma=1.6666667
-courant_factor=0.5
+courant_factor=0.1
 slope_type=2
 riemann='llf'
 riemann2d='llf'

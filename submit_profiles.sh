@@ -689,7 +689,7 @@ case "${cmd}" in
     BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambidiff}" \
     NML="${ambi_nml}" PROFILE=run \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
-      hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" ambidiff_gpu.slurm
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-04:00:00}" ambidiff_gpu.slurm
     ;;
   ambi-gauss)
     export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ambi}"
@@ -704,7 +704,7 @@ case "${cmd}" in
     BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.ambigauss}" \
     NML="${ambi_nml}" PROFILE=run \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
-      hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" ambigauss_gpu.slurm
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-04:00:00}" ambigauss_gpu.slurm
     ;;
   alfven-ad)
     export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ambi}"
@@ -719,7 +719,7 @@ case "${cmd}" in
     BIN_GPU="${BIN_GPU:-${MINIRAM}/bin/ramses3d.mhd.alfvenad}" \
     NML="${alfven_nml}" PROFILE=run \
     BUILD_BINARIES="${BUILD_BINARIES:-1}" \
-      hackathon_sbatch --time="${DMO_SLURM_TIME:-01:00:00}" alfven_ad_gpu.slurm
+      hackathon_sbatch --time="${DMO_SLURM_TIME:-04:00:00}" alfven_ad_gpu.slurm
     ;;
   pono)
     export MINIRAM_EXPECTED_BRANCH="${MINIRAM_EXPECTED_BRANCH:-gpu_ohm}"
@@ -1075,6 +1075,11 @@ case "${cmd}" in
     export GPU_GRAV=0
     export GPU_UNITS=
     export GPU_FASTMATH="${GPU_FASTMATH:-0}"
+    # OT MHD current sheets (t~0.48) are unstable in single precision: NPRE=4 drives
+    # emag -> NaN (~step 925), while NPRE=8 is stable to t=0.5 (verified develop OT and
+    # gpu_sgs OT-SGS, jobs 2846875/2846878). Default to double; override OT_SGS_NPRE=4
+    # to deliberately reproduce the blow-up.
+    export GPU_NPRE="${OT_SGS_NPRE:-8}"
     export IC_DIR
     export DMO_TEND="${DMO_TEND:-0.5}"
     export DMO_FOUTPUT="${DMO_FOUTPUT:-1000000}"

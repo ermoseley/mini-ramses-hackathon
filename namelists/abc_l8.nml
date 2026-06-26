@@ -28,7 +28,7 @@ tend=46.
 
 &HYDRO_PARAMS
 gamma=1.6666667
-courant_factor=0.8
+courant_factor=0.2
 slope_type=2
 riemann='upwind'
 riemann2d='upwind'
