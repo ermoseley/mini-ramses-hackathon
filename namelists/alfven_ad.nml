@@ -1,8 +1,5 @@
-! Circularly polarized standing Alfvén wave with ambipolar damping: guide B_x = C_ave (parallel to k),
-! B_y = -A_ave/sqrt(2) sin(kx), B_z = +A_ave/sqrt(2) sin(kx), v_y = v_z = -A_ave/sqrt(2) cos(kx) at t=0.
-! The transverse field rotates in time so that
-! |B_perp| = A_ave |sin(kx)| is a FIXED spatial pattern decaying monotonically as exp(-gamma t).
-! gamma = eta_ad * C_ave^2 * k^2 / (2*rho); eta_ad=0.1 => gamma ~ 1.974, omega = k*C_ave/sqrt(rho) ~ 6.283 (~2 periods by tend=2).
+! Sec. 3.3 circularly polarized Alfven wave (Moseley+2023, mu=0): B = v = A_ave cos(kz) x + A_ave sin(kz) y + C_ave z at t=0.
+! Traveling CP wave along z; Sec. 3.3 is ideal (no AD). With eta_ad>0, |B_perp| ~ A_ave exp(-gamma t), gamma = eta_ad*C_ave^2*k^2/(2*rho).
 ! make NDIM=3 MPI=1 HYDRO=1 MHD=1 INIT=ALFVENAD
 
 &RUN_PARAMS
@@ -22,7 +19,7 @@ boxlen=1.0
 /
 
 &INIT_PARAMS
-A_ave=0.01
+A_ave=0.1
 C_ave=1.0
 /
 

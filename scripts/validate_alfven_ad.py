@@ -29,9 +29,9 @@ def output_numbers(run_dir: Path) -> list[int]:
     return sorted(int(p.name.split("_")[-1]) for p in run_dir.glob("output_*"))
 
 
-def theory_gamma(eta_ad: float, bx: float, boxlen: float, rho: float = 1.0) -> tuple[float, float, float]:
+def theory_gamma(eta_ad: float, b_guide: float, boxlen: float, rho: float = 1.0) -> tuple[float, float, float]:
     k = 2.0 * math.pi / boxlen
-    chi = eta_ad * bx * bx
+    chi = eta_ad * b_guide * b_guide
     gamma = chi * k * k / (2.0 * rho)
     return k, chi, gamma
 
@@ -45,19 +45,19 @@ def profile_bperp(run_dir: Path, ram, nout: int, mid_frac: float = 0.5):
         y0 = mid_frac * ram.rd_info(nout, path=str(run_dir)).boxlen
         mask = np.abs(c.x[1] - y0) < 1.5 * np.min(c.dx)
     else:
-        y0 = z0 = mid_frac * ram.rd_info(nout, path=str(run_dir)).boxlen
-        mask = (np.abs(c.x[1] - y0) < 1.5 * np.min(c.dx)) & (
-            np.abs(c.x[2] - z0) < 1.5 * np.min(c.dx)
+        x0 = y0 = mid_frac * ram.rd_info(nout, path=str(run_dir)).boxlen
+        mask = (np.abs(c.x[0] - x0) < 1.5 * np.min(c.dx)) & (
+            np.abs(c.x[1] - y0) < 1.5 * np.min(c.dx)
         )
-    x = c.x[0][mask]
-    by = c.u[6][mask]
-    bz = c.u[7][mask]
-    order = np.argsort(x)
-    return x[order], by[order], bz[order], float(np.min(c.dx))
+    z = c.x[2][mask] if ndim >= 3 else c.x[0][mask]
+    bx = c.u[4][mask] if ndim >= 3 else c.u[4][mask]
+    by = c.u[5][mask] if ndim >= 3 else c.u[5][mask]
+    order = np.argsort(z)
+    return z[order], bx[order], by[order], float(np.min(c.dx))
 
 
-def analytic_bperp(x: np.ndarray, b0: float, k: float, gamma: float, t: float) -> np.ndarray:
-    return b0 * np.abs(np.sin(k * x)) * math.exp(-gamma * t)
+def analytic_bperp(a0: float, gamma: float, t: float) -> float:
+    return a0 * math.exp(-gamma * t)
 
 
 def l1_l2(sim: np.ndarray, ref: np.ndarray) -> tuple[float, float]:
@@ -73,27 +73,35 @@ def sin_coeff(x: np.ndarray, f: np.ndarray, k: float) -> float:
     return float(np.sum(f * s) / denom)
 
 
-def fit_bperp_amplitude(x: np.ndarray, by: np.ndarray, bz: np.ndarray, k: float) -> float:
-    return math.hypot(sin_coeff(x, by, k), sin_coeff(x, bz, k))
+def cos_coeff(x: np.ndarray, f: np.ndarray, k: float) -> float:
+    c = np.cos(k * x)
+    denom = float(np.sum(c * c))
+    if denom <= 0:
+        return 0.0
+    return float(np.sum(f * c) / denom)
+
+
+def fit_bperp_amplitude(x: np.ndarray, bx: np.ndarray, by: np.ndarray, k: float) -> float:
+    return math.hypot(cos_coeff(x, bx, k), sin_coeff(x, by, k))
 
 
 def amplitude_series(
     run_dir: Path, ram, k: float, mid_frac: float = 0.5
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     times: list[float] = []
+    bx_modes: list[float] = []
     by_modes: list[float] = []
-    bz_modes: list[float] = []
     amps: list[float] = []
     for nout in output_numbers(run_dir):
         info = ram.rd_info(nout, path=str(run_dir))
-        x, by, bz, _ = profile_bperp(run_dir, ram, nout, mid_frac)
+        x, bx, by, _ = profile_bperp(run_dir, ram, nout, mid_frac)
         times.append(float(info.texp))
+        bx_modes.append(cos_coeff(x, bx, k))
         by_modes.append(sin_coeff(x, by, k))
-        bz_modes.append(sin_coeff(x, bz, k))
-        amps.append(math.hypot(by_modes[-1], bz_modes[-1]))
+        amps.append(math.hypot(bx_modes[-1], by_modes[-1]))
     if not times:
         return np.array([]), np.array([]), np.array([]), np.array([])
-    return np.array(times), np.array(by_modes), np.array(bz_modes), np.array(amps)
+    return np.array(times), np.array(bx_modes), np.array(by_modes), np.array(amps)
 
 
 def plot_damping(
@@ -110,7 +118,7 @@ def plot_damping(
     out.parent.mkdir(parents=True, exist_ok=True)
     t_theory = np.linspace(0.0, float(t[-1]) if len(t) else 0.05, 800)
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label=r"simulation $|B_\perp|$ envelope")
+    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label=r"simulation $|B_\perp|$ amplitude")
     ax.plot(
         t_theory,
         a0 * np.exp(-gamma * t_theory),
@@ -121,7 +129,7 @@ def plot_damping(
     )
     ax.set_xlabel("time")
     ax.set_ylabel(r"$|B_\perp|$ Fourier amplitude")
-    title = "Circularly polarized standing Alfvén wave: ambipolar damping"
+    title = "Circularly polarized traveling Alfvén wave: ambipolar damping"
     if label:
         title = f"{title} ({label})"
     ax.set_title(title)
@@ -153,14 +161,15 @@ def plot_bperp_profiles(
     for j, nout in enumerate(picks):
         info = ram.rd_info(nout, path=str(run_dir))
         t = float(info.texp)
-        x, by, bz, _ = profile_bperp(run_dir, ram, nout)
-        bperp = np.hypot(by, bz)
+        z, bx, by, _ = profile_bperp(run_dir, ram, nout)
+        bperp = np.hypot(bx, by)
+        amp = analytic_bperp(a0, gamma, t)
         color = cmap(j / max(1, nframes - 1))
-        ax.plot(x, bperp, lw=1.1, color=color, label=f"t={t:.2f}")
-        ax.plot(x, analytic_bperp(x, a0, k, gamma, t), ":", lw=1.0, color=color)
-    ax.set_xlabel("x")
-    ax.set_ylabel(r"$|B_\perp|(x)$")
-    ax.set_title(r"Fixed $|B_\perp|=A_0|\sin(kx)|$ pattern decaying (dotted: theory)")
+        ax.plot(z, bperp, lw=1.1, color=color, label=f"t={t:.2f}")
+        ax.axhline(amp, color=color, ls=":", lw=1.0)
+    ax.set_xlabel("z")
+    ax.set_ylabel(r"$|B_\perp|(z)$")
+    ax.set_title(r"Traveling CP wave; dotted = theory envelope A0 exp(-gamma t)")
     ax.grid(True, alpha=0.3)
     ax.legend(loc="upper right", fontsize=8, ncol=2)
     fig.tight_layout()
@@ -190,8 +199,8 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--workdir", type=Path, required=True)
     p.add_argument("--levels", type=int, nargs="+", default=[6, 7, 8, 9])
-    p.add_argument("--a0", type=float, default=0.01)
-    p.add_argument("--bz", type=float, default=1.0, help="guide-field B_x (legacy option name)")
+    p.add_argument("--a0", type=float, default=0.1)
+    p.add_argument("--bz", type=float, default=1.0, help="guide-field B_z (legacy option name)")
     p.add_argument("--rho", type=float, default=1.0)
     p.add_argument("--eta-ad", type=float, default=0.1)
     p.add_argument("--boxlen", type=float, default=1.0)
@@ -212,15 +221,16 @@ def main() -> None:
     omega = k * args.bz / math.sqrt(args.rho)
 
     lines: list[str] = []
-    lines.append("Circularly polarized standing Alfven wave ambipolar damping validation")
+    lines.append("Sec. 3.3 circularly polarized traveling Alfven wave (Moseley+2023, mu=0)")
     lines.append(
-        f"  t=0: B_y = -{args.a0}/sqrt(2) sin(kx), B_z = +{args.a0}/sqrt(2) sin(kx), "
-        f"v_y = v_z = -{args.a0}/sqrt(2) cos(kx), B_x = {args.bz}, rho = {args.rho}"
+        f"  t=0: B_x = {args.a0} cos(kz), B_y = {args.a0} sin(kz), B_z = {args.bz}, "
+        f"v = B, rho = {args.rho}"
     )
-    lines.append(f"  |B_perp|(x,t) = {args.a0} |sin(kx)| exp(-gamma t)  (fixed pattern, rotating field)")
+    lines.append(f"  Sec. 3.3 (ideal, no AD): constant |B_perp| = {args.a0}, omega = k*B_z/sqrt(rho)")
+    lines.append(f"  With eta_ad>0: |B_perp|(t) ~ {args.a0} exp(-gamma t)")
     lines.append(f"  k = 2*pi/boxlen = {k:.6g}")
     lines.append(f"  chi = eta_ad*C_ave^2 = {chi:.6g}")
-    lines.append(f"  theory omega = k*B_x/sqrt(rho) = {omega:.6g}")
+    lines.append(f"  theory omega = k*B_z/sqrt(rho) = {omega:.6g}")
     lines.append(f"  theory gamma = chi*k^2/(2*rho) = {gamma:.6g}")
     lines.append("")
 
@@ -236,21 +246,21 @@ def main() -> None:
         nout = latest_output(run)
         info = ram.rd_info(nout, path=str(run))
         t = float(info.texp)
-        x, by, bz, dx = profile_bperp(run, ram, nout)
-        bperp = np.hypot(by, bz)
-        ref = analytic_bperp(x, args.a0, k, gamma, t)
-        l1, l2 = l1_l2(bperp, ref)
+        z, bx, by, dx = profile_bperp(run, ram, nout)
+        bperp = np.hypot(bx, by)
+        ref = analytic_bperp(args.a0, gamma, t)
+        l1, l2 = l1_l2(bperp, np.full_like(bperp, ref))
         l1s.append(l1)
         l2s.append(l2)
         dxs.append(dx)
-        amp = fit_bperp_amplitude(x, by, bz, k)
+        amp = fit_bperp_amplitude(z, bx, by, k)
         amp0 = args.a0 * math.exp(-gamma * t)
         lines.append(
             f"L{lev}  t={t:.5g}  dx={dx:.3e}  L1={l1:.3e}  L2={l2:.3e}  "
-            f"|B_perp|_fit={amp:.3e}  |B_perp|_theory={amp0:.3e}  ncell={len(x)}"
+            f"|B_perp|_fit={amp:.3e}  |B_perp|_theory={amp0:.3e}  ncell={len(z)}"
         )
 
-        t_series, by_series, bz_series, amp_series = amplitude_series(run, ram, k)
+        t_series, bx_series, by_series, amp_series = amplitude_series(run, ram, k)
         rate = fit_decay_rate(t_series, amp_series)
         if rate is not None:
             lines.append(
@@ -260,13 +270,13 @@ def main() -> None:
         if len(amp_series) >= 2:
             tol = max(1.0e-12, 1.0e-4 * args.a0)
             monotonic = bool(np.all(np.diff(amp_series) <= tol))
+            bx0 = abs(float(bx_series[0]))
             by0 = abs(float(by_series[0]))
-            bz0 = abs(float(bz_series[0]))
-            ratio = by0 / bz0 if bz0 > 0 else math.inf
+            ratio = bx0 / by0 if by0 > 0 else math.inf
             lines.append(
                 f"       envelope monotonic = {monotonic}  "
-                f"initial |B_y|_mode={by0:.3e}  "
-                f"initial |B_z|_mode={bz0:.3e}  ratio={ratio:.3f}"
+                f"initial |B_x|_mode={bx0:.3e}  "
+                f"initial |B_y|_mode={by0:.3e}  ratio={ratio:.3f}"
             )
         lines.append("")
 
