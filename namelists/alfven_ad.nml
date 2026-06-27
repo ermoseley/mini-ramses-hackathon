@@ -28,6 +28,12 @@ delta_tout=0.05
 tend=2.0
 /
 
+&COOLING_PARAMS
+isothermal=.true.
+eos_type=1
+eos_T2=1.21215509888253e-8
+/
+
 &HYDRO_PARAMS
 gamma=1.6666667
 courant_factor=0.8
@@ -39,7 +45,7 @@ induction=.false.
 etamag=0.0
 eta_ad=0.1
 cp_ad=0.8
-rkg_alpha=-1
+rkg_alpha=0.5
 /
 
 &REFINE_PARAMS
