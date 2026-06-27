@@ -65,43 +65,23 @@ def l1_l2(sim: np.ndarray, ref: np.ndarray) -> tuple[float, float]:
     return float(np.mean(np.abs(err))), float(np.sqrt(np.mean(err * err)))
 
 
-def sin_coeff(x: np.ndarray, f: np.ndarray, k: float) -> float:
-    s = np.sin(k * x)
-    denom = float(np.sum(s * s))
-    if denom <= 0:
-        return 0.0
-    return float(np.sum(f * s) / denom)
+def domain_avg_bperp(run_dir: Path, ram, nout: int) -> float:
+    c = ram.rd_cell(nout, path=str(run_dir))
+    bx = c.u[4]
+    by = c.u[5]
+    return float(np.mean(np.hypot(bx, by)))
 
 
-def cos_coeff(x: np.ndarray, f: np.ndarray, k: float) -> float:
-    c = np.cos(k * x)
-    denom = float(np.sum(c * c))
-    if denom <= 0:
-        return 0.0
-    return float(np.sum(f * c) / denom)
-
-
-def fit_bperp_amplitude(x: np.ndarray, bx: np.ndarray, by: np.ndarray, k: float) -> float:
-    return math.hypot(cos_coeff(x, bx, k), sin_coeff(x, by, k))
-
-
-def amplitude_series(
-    run_dir: Path, ram, k: float, mid_frac: float = 0.5
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def amplitude_series(run_dir: Path, ram) -> tuple[np.ndarray, np.ndarray]:
     times: list[float] = []
-    bx_modes: list[float] = []
-    by_modes: list[float] = []
     amps: list[float] = []
     for nout in output_numbers(run_dir):
         info = ram.rd_info(nout, path=str(run_dir))
-        x, bx, by, _ = profile_bperp(run_dir, ram, nout, mid_frac)
         times.append(float(info.texp))
-        bx_modes.append(cos_coeff(x, bx, k))
-        by_modes.append(sin_coeff(x, by, k))
-        amps.append(math.hypot(bx_modes[-1], by_modes[-1]))
+        amps.append(domain_avg_bperp(run_dir, ram, nout))
     if not times:
-        return np.array([]), np.array([]), np.array([]), np.array([])
-    return np.array(times), np.array(bx_modes), np.array(by_modes), np.array(amps)
+        return np.array([]), np.array([])
+    return np.array(times), np.array(amps)
 
 
 def plot_damping(
@@ -118,7 +98,7 @@ def plot_damping(
     out.parent.mkdir(parents=True, exist_ok=True)
     t_theory = np.linspace(0.0, float(t[-1]) if len(t) else 0.05, 800)
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label=r"simulation $|B_\perp|$ amplitude")
+    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label=r"simulation $\langle\sqrt{B_x^2+B_y^2}\rangle$")
     ax.plot(
         t_theory,
         a0 * np.exp(-gamma * t_theory),
@@ -128,7 +108,7 @@ def plot_damping(
         label=f"theory A0 exp(-gamma t), gamma={gamma:.4g}",
     )
     ax.set_xlabel("time")
-    ax.set_ylabel(r"$|B_\perp|$ Fourier amplitude")
+    ax.set_ylabel(r"$\langle\sqrt{B_x^2+B_y^2}\rangle$")
     title = "Circularly polarized traveling Alfvén wave: ambipolar damping"
     if label:
         title = f"{title} ({label})"
@@ -253,30 +233,28 @@ def main() -> None:
         l1s.append(l1)
         l2s.append(l2)
         dxs.append(dx)
-        amp = fit_bperp_amplitude(z, bx, by, k)
+        amp = domain_avg_bperp(run, ram, nout)
         amp0 = args.a0 * math.exp(-gamma * t)
         lines.append(
             f"L{lev}  t={t:.5g}  dx={dx:.3e}  L1={l1:.3e}  L2={l2:.3e}  "
-            f"|B_perp|_fit={amp:.3e}  |B_perp|_theory={amp0:.3e}  ncell={len(z)}"
+            f"<|B_perp|>={amp:.3e}  |B_perp|_theory={amp0:.3e}  ncell={len(z)}"
         )
 
-        t_series, bx_series, by_series, amp_series = amplitude_series(run, ram, k)
+        t_series, amp_series = amplitude_series(run, ram)
         rate = fit_decay_rate(t_series, amp_series)
         if rate is not None:
+            ratio_str = f"{rate / gamma:.3f}" if gamma > 0 else "n/a"
             lines.append(
-                f"       |B_perp| envelope decay (fitted) = {rate:.6g}  "
-                f"(theory gamma = {gamma:.6g}, ratio = {rate / gamma:.3f})"
+                f"       <|B_perp|> decay (fitted) = {rate:.6g}  "
+                f"(theory gamma = {gamma:.6g}, ratio = {ratio_str})"
             )
         if len(amp_series) >= 2:
             tol = max(1.0e-12, 1.0e-4 * args.a0)
             monotonic = bool(np.all(np.diff(amp_series) <= tol))
-            bx0 = abs(float(bx_series[0]))
-            by0 = abs(float(by_series[0]))
-            ratio = bx0 / by0 if by0 > 0 else math.inf
             lines.append(
                 f"       envelope monotonic = {monotonic}  "
-                f"initial |B_x|_mode={bx0:.3e}  "
-                f"initial |B_y|_mode={by0:.3e}  ratio={ratio:.3f}"
+                f"t=0 <|B_perp|>={float(amp_series[0]):.3e}  "
+                f"t_end <|B_perp|>={float(amp_series[-1]):.3e}"
             )
         lines.append("")
 
@@ -304,7 +282,7 @@ def main() -> None:
                 raise SystemExit(f"no runs with outputs under {args.workdir}")
             plot_lev = max(avail)
         run = args.workdir / f"L{plot_lev}"
-        t_series, _, _, amp_series = amplitude_series(run, ram, k)
+        t_series, amp_series = amplitude_series(run, ram)
         if len(t_series) < 2:
             raise SystemExit(f"need >=2 outputs in {run} for --plot")
         plot_out = args.plot_out or (args.workdir / f"alfven_ad_damping_L{plot_lev}.png")
