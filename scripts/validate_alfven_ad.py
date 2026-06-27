@@ -65,11 +65,11 @@ def l1_l2(sim: np.ndarray, ref: np.ndarray) -> tuple[float, float]:
     return float(np.mean(np.abs(err))), float(np.sqrt(np.mean(err * err)))
 
 
-def domain_avg_bperp(run_dir: Path, ram, nout: int) -> float:
+def volume_rms_bperp(run_dir: Path, ram, nout: int) -> float:
     c = ram.rd_cell(nout, path=str(run_dir))
     bx = c.u[5]
     by = c.u[6]
-    return float(np.mean(np.hypot(bx, by)))
+    return float(np.sqrt(np.mean(bx * bx + by * by)))
 
 
 def amplitude_series(run_dir: Path, ram) -> tuple[np.ndarray, np.ndarray]:
@@ -78,7 +78,7 @@ def amplitude_series(run_dir: Path, ram) -> tuple[np.ndarray, np.ndarray]:
     for nout in output_numbers(run_dir):
         info = ram.rd_info(nout, path=str(run_dir))
         times.append(float(info.texp))
-        amps.append(domain_avg_bperp(run_dir, ram, nout))
+        amps.append(volume_rms_bperp(run_dir, ram, nout))
     if not times:
         return np.array([]), np.array([])
     return np.array(times), np.array(amps)
@@ -98,7 +98,7 @@ def plot_damping(
     out.parent.mkdir(parents=True, exist_ok=True)
     t_theory = np.linspace(0.0, float(t[-1]) if len(t) else 0.05, 800)
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label=r"simulation $\langle\sqrt{B_x^2+B_y^2}\rangle$")
+    ax.plot(t, amp, "o-", lw=1.2, ms=4, color="#1f77b4", label=r"simulation $\sqrt{\langle B_x^2+B_y^2\rangle}$")
     ax.plot(
         t_theory,
         a0 * np.exp(-gamma * t_theory),
@@ -108,7 +108,7 @@ def plot_damping(
         label=f"theory A0 exp(-gamma t), gamma={gamma:.4g}",
     )
     ax.set_xlabel("time")
-    ax.set_ylabel(r"$\langle\sqrt{B_x^2+B_y^2}\rangle$")
+    ax.set_ylabel(r"volume RMS $\sqrt{B_x^2+B_y^2}$")
     title = "Circularly polarized traveling Alfvén wave: ambipolar damping"
     if label:
         title = f"{title} ({label})"
@@ -206,8 +206,8 @@ def main() -> None:
         f"  t=0: B_x = {args.a0} cos(kz), B_y = {args.a0} sin(kz), B_z = {args.bz}, "
         f"v = B, rho = {args.rho}"
     )
-    lines.append(f"  Sec. 3.3 (ideal, no AD): constant |B_perp| = {args.a0}, omega = k*B_z/sqrt(rho)")
-    lines.append(f"  With eta_ad>0: |B_perp|(t) ~ {args.a0} exp(-gamma t)")
+    lines.append(f"  Sec. 3.3 (ideal, no AD): constant |B_perp| = {args.a0}, RMS = {args.a0}, omega = k*B_z/sqrt(rho)")
+    lines.append(f"  With eta_ad>0: RMS(|B_perp|)(t) ~ {args.a0} exp(-gamma t)")
     lines.append(f"  k = 2*pi/boxlen = {k:.6g}")
     lines.append(f"  chi = eta_ad*C_ave^2 = {chi:.6g}")
     lines.append(f"  theory omega = k*B_z/sqrt(rho) = {omega:.6g}")
@@ -233,11 +233,11 @@ def main() -> None:
         l1s.append(l1)
         l2s.append(l2)
         dxs.append(dx)
-        amp = domain_avg_bperp(run, ram, nout)
+        amp = volume_rms_bperp(run, ram, nout)
         amp0 = args.a0 * math.exp(-gamma * t)
         lines.append(
             f"L{lev}  t={t:.5g}  dx={dx:.3e}  L1={l1:.3e}  L2={l2:.3e}  "
-            f"<|B_perp|>={amp:.3e}  |B_perp|_theory={amp0:.3e}  ncell={len(z)}"
+            f"RMS={amp:.3e}  RMS_theory={amp0:.3e}  ncell={len(z)}"
         )
 
         t_series, amp_series = amplitude_series(run, ram)
@@ -245,7 +245,7 @@ def main() -> None:
         if rate is not None:
             ratio_str = f"{rate / gamma:.3f}" if gamma > 0 else "n/a"
             lines.append(
-                f"       <|B_perp|> decay (fitted) = {rate:.6g}  "
+                f"       RMS decay (fitted gamma) = {rate:.6g}  "
                 f"(theory gamma = {gamma:.6g}, ratio = {ratio_str})"
             )
         if len(amp_series) >= 2:
@@ -253,8 +253,8 @@ def main() -> None:
             monotonic = bool(np.all(np.diff(amp_series) <= tol))
             lines.append(
                 f"       envelope monotonic = {monotonic}  "
-                f"t=0 <|B_perp|>={float(amp_series[0]):.3e}  "
-                f"t_end <|B_perp|>={float(amp_series[-1]):.3e}"
+                f"t=0 RMS={float(amp_series[0]):.3e}  "
+                f"t_end RMS={float(amp_series[-1]):.3e}"
             )
         lines.append("")
 
