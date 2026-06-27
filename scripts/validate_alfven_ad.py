@@ -50,8 +50,8 @@ def profile_bperp(run_dir: Path, ram, nout: int, mid_frac: float = 0.5):
             np.abs(c.x[1] - y0) < 1.5 * np.min(c.dx)
         )
     z = c.x[2][mask] if ndim >= 3 else c.x[0][mask]
-    bx = c.u[4][mask] if ndim >= 3 else c.u[4][mask]
-    by = c.u[5][mask] if ndim >= 3 else c.u[5][mask]
+    bx = c.u[5][mask]
+    by = c.u[6][mask]
     order = np.argsort(z)
     return z[order], bx[order], by[order], float(np.min(c.dx))
 
@@ -67,8 +67,8 @@ def l1_l2(sim: np.ndarray, ref: np.ndarray) -> tuple[float, float]:
 
 def domain_avg_bperp(run_dir: Path, ram, nout: int) -> float:
     c = ram.rd_cell(nout, path=str(run_dir))
-    bx = c.u[4]
-    by = c.u[5]
+    bx = c.u[5]
+    by = c.u[6]
     return float(np.mean(np.hypot(bx, by)))
 
 
